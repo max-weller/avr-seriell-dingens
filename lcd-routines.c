@@ -159,10 +159,21 @@ void lcd_string( const char *data )
     while( *data != '\0' )
         lcd_data( *data++ );
 }
- 
+
+void lcd_string_P( PGM_P data ) {
+    uint8_t tmp;
+
+    tmp = pgm_read_byte( data );
+    while( tmp != '\0' ) {
+        lcd_data( tmp );
+        data++;
+        tmp = pgm_read_byte( data );
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Schreibt ein Zeichen in den Character Generator RAM
- 
+
 void lcd_generatechar( uint8_t startadresse, const uint8_t *data )
 {
     // Startposition des Zeichens einstellen

@@ -70,7 +70,7 @@ FORMAT = ihex
 
 
 # Target file name (without extension).
-TARGET = main
+TARGET = main2
 
 
 # Object files directory
@@ -78,7 +78,7 @@ OBJDIR = obj
 
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd-routines.c led_strip.c
+SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c softuart.c
 
 
 # List C++ source files here. (C dependencies are automatically generated.)
@@ -255,16 +255,19 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 
 #---------------- Programming Options (avrdude) ----------------
 
+### avrdude -c avrisp2 -P /dev/ttyUSB0 -p m32 -U flash:w:main.hex:i
+
+
 # Programming hardware: alf avr910 avrisp bascom bsd 
 # dt006 pavr picoweb pony-stk200 sp12 stk200 stk500
 #
 # Type: avrdude -c ?
 # to get a full listing.
 #
-AVRDUDE_PROGRAMMER = pony-stk200
+AVRDUDE_PROGRAMMER = avrisp2
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
-AVRDUDE_PORT = lpt1
+AVRDUDE_PORT = /dev/ttyUSB0
 
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep

@@ -4,7 +4,7 @@
 #define WS2801_DATA_PIN PA2
 #define WS2801_CLK_PIN PA1
 
-#define WS2801_STRIP_LEN   30      //Anzahl der LED Elemente
+#define WS2801_STRIP_LEN   93      //Anzahl der LED Elemente
 #define WS2801_LATCH_DELAY  500    //500µs minimal für Latch 
 #define WS2801_BIT_PERIOD   20      //Takte verzögerung zw 2 Signale
 #define WS2801_R_DEF        128      //Default Rotanteil
@@ -16,8 +16,11 @@
 
 #define WS2801_BIT_DELAY (WS2801_BIT_PERIOD/2)
 
-void ws2801_draw_buffer(unsigned char *RGB_data_send);
+typedef uint16_t ledidx_t;
+
+void ws2801_draw_buffer(uint8_t *RGB_data_send);
 void ws2801_draw_all(uint8_t _ws2801_current_red,uint8_t _ws2801_current_green,uint8_t _ws2801_current_blue);
 void ws2801_reset(void);
 void ws2801_init(void);
+void _ws2801_send_byte(uint8_t byte);
 

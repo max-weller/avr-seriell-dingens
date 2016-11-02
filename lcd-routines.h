@@ -4,7 +4,9 @@
  
 #ifndef LCD_ROUTINES_H
 #define LCD_ROUTINES_H
- 
+
+#include <avr/pgmspace.h>
+
 ////////////////////////////////////////////////////////////////////////////////
 // Hier die verwendete Taktfrequenz in Hz eintragen, wichtig!
  
@@ -77,7 +79,12 @@ void lcd_data( uint8_t data );
 ////////////////////////////////////////////////////////////////////////////////
 // Ausgabe eines Strings an der aktuellen Cursorposition 
 void lcd_string( const char *data );
- 
+
+////////////////////////////////////////////////////////////////////////////////
+// Ausgabe eines Strings an der aktuellen Cursorposition
+// String liegt im Flash
+void lcd_string_P( PGM_P data );
+
 ////////////////////////////////////////////////////////////////////////////////
 // Definition eines benutzerdefinierten Sonderzeichens.
 // data muss auf ein Array[8] mit den Zeilencodes des zu definierenden Zeichens
