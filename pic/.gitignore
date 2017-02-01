@@ -1,0 +1,6 @@
+*.o
+*.lst
+*.hex
+*.cod
+*.asm
+!bootloader_2.asm

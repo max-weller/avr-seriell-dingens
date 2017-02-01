@@ -1,0 +1,25 @@
+
+
+#define LED_RED_PORT PORTCbits.RC1
+#define LED_RED_TRIS TRISCbits.TRISC1
+#define LED_RED2_PORT PORTDbits.RD0
+#define LED_RED2_TRIS TRISDbits.TRISD0
+#define LED_YELLOW_PORT PORTAbits.RA5
+#define LED_YELLOW_TRIS TRISAbits.TRISA5
+
+#define RECV_PORT PORTBbits.RB0
+#define RECV_TRIS TRISBbits.TRISB0
+
+#define BOOT_PORT PORTBbits.RB7
+#define BOOT_TRIS TRISBbits.TRISB7
+
+
+// RB 4 rs485 Receive Enable
+#define RS485_RE_PORT PORTBbits.RB4
+#define RS485_RE_TRIS TRISBbits.TRISB4
+// RB 5 rs485 Driver Enable
+#define RS485_DE_PORT PORTBbits.RB5
+#define RS485_DE_TRIS TRISBbits.TRISB5
+
+
+
