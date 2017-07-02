@@ -40,7 +40,7 @@ void _ws2801_send_byte(uint8_t byte)
 
 void ws2801_draw_all(uint8_t _ws2801_current_red,uint8_t _ws2801_current_green,uint8_t _ws2801_current_blue)
 {
-    for(ledidx_t i=0; i <= WS2801_STRIP_LEN; i++)
+    for(ledidx_t i=0; i <= STRIPE_LENGTH; i++)
     {
         _ws2801_send_byte(_ws2801_current_red);
         _ws2801_send_byte(_ws2801_current_green);
@@ -72,7 +72,7 @@ void ws2801_draw_buffer(uint8_t *RGB_data_send)
 {
     
   
-  for(ledidx_t i=0; i<=WS2801_STRIP_LEN*3; i++)
+  for(ledidx_t i=0; i<=STRIPE_LENGTH*3; i++)
     {
         _ws2801_send_byte(RGB_data_send[i]);
 

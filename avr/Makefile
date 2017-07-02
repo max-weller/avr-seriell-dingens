@@ -70,16 +70,16 @@ FORMAT = ihex
 
 
 # Target file name (without extension).
-TARGET = main2
+TARGET = main
 
 
 # Object files directory
-OBJDIR = obj
-
+#OBJDIR = obj
+OBJDIR = .
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c softuart.c
-
+SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c ../Irmp/irmp.c
+# disabled softuart.c 
 
 # List C++ source files here. (C dependencies are automatically generated.)
 CPPSRC = 
@@ -291,6 +291,7 @@ AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER)
 AVRDUDE_FLAGS += $(AVRDUDE_NO_VERIFY)
 AVRDUDE_FLAGS += $(AVRDUDE_VERBOSE)
 AVRDUDE_FLAGS += $(AVRDUDE_ERASE_COUNTER)
+AVRDUDE_FLAGS += -B 1
 
 
 

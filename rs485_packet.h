@@ -1,5 +1,23 @@
 
 
+#define C_SET_OUTPUT				 	0x05
+#define C_GET_TEMPERATURE				0x40
+#define C_SET_DISPLAY				 	0x41
+#define C_SET_MENU				 		0x42
+#define C_SET_MENU_ITEM				 	0x43
+#define C_BUZZER				 		0x49
+#define C_BMP_FILL_CONST				0x50
+#define C_BMP_WRITE_RANGE				0x51
+#define C_BMP_RANGE_FILL_CONST			0x52
+#define C_BMP_RANGE_ADD_CONST			0x53
+#define C_BMP_SCROLL_LEFT				0x54
+#define C_BMP_SCROLL_RIGHT				0x55
+#define C_BMP_TO_STRIPE_SINGLE			0x5e
+#define C_BMP_TO_STRIPE_SET_INTERVAL	0x5f
+#define C_PING							0xf1
+#define C_SET_BAUD_RATE					0xfc
+#define C_REBOOT_TO_BOOTLOADER			0xbf
+
 typedef union  {
 	uint8_t raw[RS485_BUFLEN];
 	struct {

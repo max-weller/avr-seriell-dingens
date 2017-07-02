@@ -4,7 +4,7 @@
 #define WS2801_DATA_PIN PA2
 #define WS2801_CLK_PIN PA1
 
-#define WS2801_STRIP_LEN   93      //Anzahl der LED Elemente
+#define STRIPE_LENGTH   93      //Anzahl der LED Elemente
 #define WS2801_LATCH_DELAY  500    //500µs minimal für Latch 
 #define WS2801_BIT_PERIOD   20      //Takte verzögerung zw 2 Signale
 #define WS2801_R_DEF        128      //Default Rotanteil
