@@ -1,0 +1,11 @@
+.dep
+*.o
+*.lst
+*.hex
+*.elf
+*.lss
+*.eep
+*.map
+*.sym
+.vscode
+
