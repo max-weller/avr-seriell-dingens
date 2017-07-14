@@ -9,6 +9,7 @@
 #include <avr/interrupt.h>
 
 #include <stdio.h>
+#include <string.h>
 
 #include "lcd-routines.h"
 #include "led_strip.h"
@@ -16,7 +17,9 @@
 #include "ds18x20.h"
 #include "onewire.h"
 
-#include "../Irmp/irmp.h"
+//#include "../Irmp/irmp.h"
+
+#include "softuart.h"
 
 /******************* port definitions ***************/
 
@@ -56,26 +59,29 @@
 
 // PORT D
 
-#define MOTION_DET_PIN REGISTER_BIT(PIND, 3)
-#define MOTION_DET_PULLUP REGISTER_BIT(PORTD, 3)
-#define MOTION_DET_DDR REGISTER_BIT(DDRD, 3)
+//#define MOTION_DET_PIN REGISTER_BIT(PIND, 3)
+//#define MOTION_DET_PULLUP REGISTER_BIT(PORTD, 3)
+//#define MOTION_DET_DDR REGISTER_BIT(DDRD, 3)
 
 //#define ONEWIRE_PORT REGISTER_BIT(PORTD, 4)
 //#define ONEWIRE_DDR REGISTER_BIT(DDRD, 4)
 
-#define BUZZER_DDR REGISTER_BIT(DDRD, 5)
+#define BELL_INPUT_PORT REGISTER_BIT(PORTA, 0)
+#define BELL_INPUT_DDR REGISTER_BIT(DDRA, 0)
+
+#define BUZZER_DDR REGISTER_BIT(DDRD, 4)
 
 
 /******** configuration / macros for rs485 receiver+transmitter */
 #define RS485_BUFLEN 37
 
-#define rs485_start_sending() do{RS485_DE_PORT = 1; /*enable rs485 driver*/  UCSRB |= (1<<TXEN);}while(0)
-#define begin_critical_section() __asm("cli")
-#define end_critical_section() __asm("sei")
-#define rs485_finish_sending() do{ __asm("nop"); __asm("nop"); __asm("nop"); UCSRB &= ~(1<<TXEN); RS485_DE_PORT = 0; }while(0)
+#define rs485_start_sending() do{}while(0)
+#define begin_critical_section() //__asm("cli")
+#define end_critical_section() //__asm("sei")
+#define rs485_finish_sending() do{  }while(0)
 
 
-#define rs485_send_byte(bt) do{ UDR = bt; while ( !( UCSRA & (1<<UDRE)) ); }while(0)
+#define rs485_send_byte(bt) softuart_putchar(bt)
 
 //#define sendByteCk(bt) TXREG=bt; cksum^=bt; while(!PIR1bits.TXIF);
 
@@ -114,13 +120,14 @@ uint8_t redraw_mstimer = 0; //milliseconds
 uint16_t onewire_mstimer = 0; //milliseconds
 uint8_t buzzer_mstimer = 0; //milliseconds
 uint8_t key_hmstimer = 0; //milliseconds
-uint8_t keyspressed = 0, keyevent = 0;
-#define KEYS_MASK ((1<<PA7)|(1<<PA6)|(1<<PA5)|(1<<PA4)|(1<<PA3))
+uint8_t keyspressed = 0, keydownevent = 0, keyupevent = 0;
+#define KEYS_MASK ((1<<PA7)|(1<<PA6)|(1<<PA5)|(1<<PA4)|(1<<PA3)|(1<<PA0))
 #define KEY_OK      (1<<PA7)
 #define KEY_PREV    (1<<PA6)
 #define KEY_NEXT    (1<<PA5)
 #define KEY_UP      (1<<PA4)
 #define KEY_CANCEL  (1<<PA3)
+#define KEY_DOORBELL (1<<PA0)
 
 #define BUZZ(startfreq, sweepstep, sweeplen, speed) do{ OCR1A=startfreq; TCCR1B = (1<<CS11)|(1<<CS10) | (1<<WGM12); buzzer_sweepstep=sweepstep; buzzer_sweeplen=sweeplen; buzzer_sweepspeed = speed; }while(0)
 #define BUZZP(startfreqH, startfreqL, sweepstep, sweeplen, speed) do{ OCR1AH=startfreqH; OCR1AL=startfreqL; TCCR1B = (1<<CS11)|(1<<CS10) | (1<<WGM12); buzzer_sweepstep=sweepstep; buzzer_sweeplen=sweeplen; buzzer_sweepspeed = speed; }while(0)
@@ -163,18 +170,18 @@ uint8_t t_hour;
 int16_t decicelsius;
 
 ISR(USART_RXC_vect) {
-  recvbyte = UDR;
-  receiveRS485();
+  //recvbyte = UDR;
+  //receiveRS485();
 }
 
 
-
+/*
 ISR(TIMER0_COMP_vect) {
   //called at 12500Hz
   (void) irmp_ISR();
-}
+}*/
 
-ISR(TIMER1_COMPA_vect) {
+ISR(TIMER1_COMPB_vect) {
   if (buzzer_mstimer-- == 0) {
     if (buzzer_sweeplen==0) {
         TCCR1B=0; //disable timer
@@ -193,30 +200,24 @@ ISR(TIMER2_COMP_vect) {
   if (redraw_mstimer>1) redraw_mstimer--;
   if (onewire_mstimer>1) onewire_mstimer--;
   if (disp_notice_scroll_mstimer>1) disp_notice_scroll_mstimer--;
-  if (PINA & KEYS_MASK) {
-    // some keys are pressed
-    if ((PINA & KEYS_MASK) != keyspressed) {
-      // newly pressed, (re)start timer
-      keyspressed = (PINA & KEYS_MASK);
-      if (key_hmstimer < 12) key_hmstimer = 12;
+  
+  // trigger keyevent for newly pushed buttons
+  keydownevent |= (PINA & KEYS_MASK) & ~keyspressed;
+  // add newly pushed buttons to the keyspressed mask
+  keyspressed |= (PINA & KEYS_MASK);
+
+  if ((PINA & KEYS_MASK) != keyspressed) {  // if keys are released
+    if (key_hmstimer == 0) {
+      key_hmstimer = 20; //start the release timer
+    } else if (key_hmstimer == 1){ //timer fired?
+      key_hmstimer = 0; //stop timer
+      keyupevent = ~(PINA & KEYS_MASK) & keyspressed;
+      keyspressed =  (PINA & KEYS_MASK); //store released keys
     } else {
-      if (key_hmstimer>1 && t_millis&1) key_hmstimer--;
-      if (key_hmstimer == 1) {
-        // keys were pressed for 50 ms, trigger the event
-        keyevent |= keyspressed;
-        BUZZ(150,-8,7,10);
-        if (myflags.key_repeating)
-          key_hmstimer = 110; //subsequent repeats after 220 ms
-        else {
-          key_hmstimer = 220; //first repeat after 440 ms
-          myflags.key_repeating = 1;
-        }
-      }
+      key_hmstimer--; //count the timer
     }
-  } else if (keyspressed) {
-    key_hmstimer = 0;
-    keyspressed = 0;
-    myflags.key_repeating=0;
+  } else {
+    key_hmstimer = 0; // stop the timer if keys were not released
   }
 
   if (t_millis == 1000) {
@@ -255,7 +256,7 @@ void keypress_backlight(void) {
 void display_homescreen(void) {
    char temperature[8];
    uint8_t i;
-   DS18X20_format_from_decicelsius( decicelsius, temperature, 8 );
+   /*DS18X20_format_from_decicelsius( decicelsius, temperature, 8 );
    sprintf_P(disp_buf2, PSTR("%02d:%02d:%02d % 7s"), t_hour, t_min, t_sec, temperature);
    lcd_home();
    for(i=0;i<16;i++)lcd_data(disp_buf2[i]);
@@ -267,6 +268,11 @@ void display_homescreen(void) {
      for(i=0;i<16;i++)lcd_data(disp_buf[i]);
    else
      for(i=16;i<32;i++)lcd_data(disp_buf[i]);
+   */
+   lcd_home();
+   for(i=0;i<16;i++)lcd_data(disp_buf[i]);
+   lcd_setcursor(0,2);
+   for(i=16;i<32;i++)lcd_data(disp_buf[i]);
 }
 
 void menu_on_nav(int8_t dir) {
@@ -276,31 +282,32 @@ void menu_on_nav(int8_t dir) {
   redraw_mstimer=1;
 }
 void menu_on_action(char key) {
-  tempbuf[0] = 0x43;
+  tempbuf[0] = C_SET_MENU_ITEM;
   tempbuf[1] = key;
   tempbuf[2] = menu_udata;
   tempbuf[3] = menu_idx;
   rs485_message_send(menu_owner, 4, &tempbuf);
 }
-
+/*
 struct {
   uint8_t cmd;
   IRMP_DATA irmp_data;
 } irmp_data;
-
+*/
 
 int main (void) {            // (2)
    ledidx_t i,j;
-
+/*
    uint8_t sensor_id[OW_ROMCODE_SIZE];
    uint8_t diff = OW_SEARCH_FIRST;
-
+*/
    // initialize output PORTB
    DDRB  = 0xFF;
    PORTB = 0x00;
 
-   initialize_input(MOTION_DET_DDR);
-   MOTION_DET_PULLUP = 1;
+   //initialize_input(MOTION_DET_DDR);
+   //MOTION_DET_PULLUP = 1;
+   initialize_input(BELL_INPUT_DDR);
 
    initialize_output(BUZZER_DDR);
 
@@ -313,7 +320,7 @@ int main (void) {            // (2)
    _delay_ms(30); lcd_init();
    memset(disp_buf, '=', 32);
    
-   lcd_string_P(PSTR("ham 0.4  "));
+   lcd_string_P(PSTR("ham 0.5  "));
    lcd_setcursor(0,2);
    lcd_string_P(PSTR("Booting ...     "));
 
@@ -354,14 +361,16 @@ int main (void) {            // (2)
    initialize_output(RS485_DE_DDR);
    RS485_DE_PORT = 0;
    uart_init();
+   softuart_init();
 
+   // Enable Interrupts
+   sei();
+   
    memcpy_P(&tempbuf, PSTR("\375doorctl"), 8);  //0375 = 0xfd
    rs485_message_send(0xff, 8, (uint8_t*)&tempbuf);
 
 
 
-   // Enable Interrupts
-   sei();
    lcd_setcursor(0,2);
    lcd_string_P(PSTR("Init LED        "));
    PORTB = 0xef;  //bootup 6
@@ -388,8 +397,8 @@ int main (void) {            // (2)
    ws2801_set_all(0,0,0);
 
    // initialize buzzer timer
-   TCCR1A = (1<<COM1A0);
-   TIMSK |= (1<<OCIE1A);  // enable interrupt on output compare
+   TCCR1A = (1<<COM1B0);
+   TIMSK |= (1<<OCIE1B);  // enable interrupt on output compare
 
    // Initialize millisecond timer
    TCCR2 = (1<<WGM21) | (1<<CS22);  //clear on compare, clock=f_osc/64
@@ -397,13 +406,16 @@ int main (void) {            // (2)
    TIMSK |= (1<<OCIE2);  // enable interrupt on output compare
    keyspressed = 0;
 
+/*
    // Initialize IR timer
    // Interrupt at 12500 Hz, f_osc=8000000, prescale=1/64, compare=10
    TCCR0 = (1<<WGM01)|(1<<CS01)|(1<<CS00);
    TIMSK |= (1<<OCIE0);  // enable interrupt on output compare
    OCR0 = 10;
+*/
 
 
+/*     ...ausgelötet
    ow_reset();
    DS18X20_find_sensor(&diff, &sensor_id[0]);
    if (diff == OW_PRESENCE_ERR) {
@@ -417,7 +429,7 @@ int main (void) {            // (2)
    }else  {
         onewire_mstimer = 1000;
         myflags.onewire_read_meas = 0;
-   }
+   }*/
 
    PORTB = 0x00;  //bootup d
    lcd_setcursor(0,2);
@@ -430,6 +442,12 @@ int main (void) {            // (2)
 
 
    while(1) {
+    // read from softuart
+    if (softuart_kbhit()) {
+      recvbyte = softuart_getchar();
+      receiveRS485();
+    }
+
     if (recvidx == -3) { // incoming message in recvpkg
       //PIE1bits.RCIE = 0;
       //RCSTAbits.CREN = 0;
@@ -439,7 +457,7 @@ int main (void) {            // (2)
       } else {
         i = 0;
         switch (recvpkg.st.command) { //command
-        case 0x05: //set output
+        case C_SET_OUTPUT: //set output
           if (recvpkg.st.data[1] == 0xff) j = 1;
           else if (recvpkg.st.data[1] == 0x00) j = 0;
           else { rs485_error(); break; }
@@ -466,30 +484,30 @@ int main (void) {            // (2)
             rs485_ack(0xAA);
           } else if (recvpkg.st.data[0] == 0x10) {
             RELAY_PORT = j;
-            if(i)relay_stimer = 10;
+            if(j)relay_stimer = 10;
             rs485_ack(0xAA);
           } else {
             rs485_error();
           }
           break;
 
-        case 0x49:
+        case C_BUZZER:
             BUZZP(recvpkg.st.data[0], recvpkg.st.data[1],recvpkg.st.data[2],recvpkg.st.data[3],recvpkg.st.data[4]);
             rs485_ack(0xaa);
             break;
 
-        case 0x40: //get temperature
-           tempbuf[0] = 0x40;
+        case C_GET_TEMPERATURE: //get temperature
+           tempbuf[0] = C_GET_TEMPERATURE;
            DS18X20_format_from_decicelsius( decicelsius, &tempbuf[1], 7 );
            rs485_message_send(recvpkg.st.fromaddr, 8|PF_ACK, (uint8_t*)tempbuf);
            break;
 
-        case 0x41: //set lcd display first row
+        case C_SET_DISPLAY: //set lcd display first row
            memcpy(disp_buf, recvpkg.st.data, 32);
            rs485_ack(0xaa);
            break;
 
-        case 0x42: //set lcd display menu options
+        case C_SET_MENU: //set lcd display menu options
            myflags.in_menu = recvpkg.st.data[0];
            menu_udata = recvpkg.st.data[1];
            menu_idx = recvpkg.st.data[2];
@@ -499,7 +517,7 @@ int main (void) {            // (2)
            rs485_ack(0xaa);
            break;
 
-        case 0x43: //set lcd display menu item text
+        case C_SET_MENU_ITEM: //set lcd display menu item text
            if (recvpkg.st.fromaddr!=menu_owner) {rs485_error(); break;}
            if (recvpkg.st.data[0]>MENU_MAX_ITEMS){rs485_error(); break;}
 
@@ -513,7 +531,7 @@ int main (void) {            // (2)
            rs485_ack(0xaa);
            break;
 
-        case 0x51: //set bmp rgb range
+        case C_BMP_WRITE_RANGE: //set bmp rgb range
           j = 1;
           i = recvpkg.st.data[0]*3;
           while (j<recvpkg.st.length && i<STRIPE_LENGTH) {
@@ -524,15 +542,15 @@ int main (void) {            // (2)
           rs485_ack(0xaa);
           break;
 
-        case 0x52: //fill bmp const color range
-        case 0x53: //dim/lighten bmp range
+        case C_BMP_RANGE_FILL_CONST: //fill bmp const color range
+        case C_BMP_RANGE_ADD_CONST: //dim/lighten bmp range
           i = recvpkg.st.data[0]*3;
           j=recvpkg.st.data[1]*3;
           if (recvpkg.st.data[0] >= STRIPE_LENGTH || recvpkg.st.data[1] >= STRIPE_LENGTH || recvpkg.st.data[1] < recvpkg.st.data[0]) {
             rs485_error(); break;
           }
           while(i<=j) {
-            if (recvpkg.st.command == 0x52) {
+            if (recvpkg.st.command == C_BMP_RANGE_FILL_CONST) {
               ws2801_buf[i] = recvpkg.st.data[2]; i++;
               ws2801_buf[i] = recvpkg.st.data[3]; i++;
               ws2801_buf[i] = recvpkg.st.data[4]; i++;
@@ -545,12 +563,12 @@ int main (void) {            // (2)
           rs485_ack(0xAA);
           break;
 /*
-        case 0x5e: //update ws2812 from bitmap
+        case C_BMP_TO_STRIPE_SINGLE: //update ws2812 from bitmap
           ws2801_draw_buffer(&ws2801_buf);
           rs485_ack(0xAA);
           break;*/
 /*
-        case 0xfc: //change baud rate
+        case C_SET_BAUD_RATE: //change baud rate
           test = recvpkg.st.data[0]<<8 | recvpkg.st.data[1];
           test32 = F_OSC;
           i = 0; j = 0;
@@ -569,17 +587,17 @@ int main (void) {            // (2)
           TXSTAbits.SYNC = 0; // async mode
           RCSTAbits.CREN = 1;
           break;*/
-        case 0xf1: // echo request
+        case C_PING: // echo request
           //  LED_YELLOW_PORT=0;
           rs485_message_send(recvpkg.st.fromaddr, recvpkg.st.length | PF_ACK, &recvpkg.st.command);
           break;
-        case 0xf3: //set system time
+        case C_SET_TIME: //set system time
           t_hour = recvpkg.st.data[0];
           t_min = recvpkg.st.data[1];
           t_sec = recvpkg.st.data[2];
           rs485_ack(0xAA);
           break;
-        /*case 0xbf: // reboot to bootloader
+        /*case C_REBOOT_TO_BOOTLOADER: // reboot to bootloader
           while(1);
           break;*/
         default:
@@ -608,6 +626,7 @@ int main (void) {            // (2)
        }
        ws2801_scroll_timer+=1;
      }
+     /*
      if (onewire_mstimer == 1) {
       LED_GREEN4_PORT=1;
         if (myflags.onewire_read_meas) {
@@ -623,6 +642,7 @@ int main (void) {            // (2)
         }
         LED_GREEN4_PORT=0;
      }
+     */
      if (redraw_mstimer == 1) {
        // redraw led stripe
        ws2801_draw_buffer(&ws2801_buf[0]);
@@ -663,10 +683,10 @@ int main (void) {            // (2)
      }
 
      // motion detector
-
+/*
      if (MOTION_DET_PIN) {
        if (!myflags.motion_det_edge) {
-         tempbuf[0] = 0x02; tempbuf[1] = 'M';
+         tempbuf[0] = C_ON_INPUT; tempbuf[1] = 'M';
          rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
          myflags.motion_det_edge = 1;
        }
@@ -675,126 +695,71 @@ int main (void) {            // (2)
      } else {
         myflags.motion_det_edge = 0;
         LED_GREEN5_PORT = 0;
-     }
-
+     }*/
+/*
      // infrared remote control
      if (irmp_get_data (&irmp_data.irmp_data))
      {
-        /*if (irmp_data.protocol == IRMP_NEC_PROTOCOL &&     // NEC-Protokoll
-            irmp_data.address == 0x1234)                   // Adresse 0x1234
-        {
-           switch (irmp_data.command)
-           {
-              case 0x0001: key1_pressed(); break;          // Taste 1
-              case 0x0002: key2_pressed(); break;          // Taste 2
-              ...
-              case 0x0009: key9_pressed(); break;          // Taste 9
-           }
-        }*/
         keypress_backlight();
         disp_notice_show(3);
         sprintf_P(disp_notice, PSTR("IR: %02x %04x %04x"), irmp_data.irmp_data.protocol
           , irmp_data.irmp_data.address
           , irmp_data.irmp_data.command);
-        irmp_data.cmd = 0x02;
+        irmp_data.cmd = C_ON_INPUT;
         rs485_message_send(0xff, 7, (uint8_t*)&irmp_data);
      }
-
-     if (keyevent == KEY_OK) {
-       /*ws2801_preset++;
-       if (ws2801_preset > WS2801_PRESET_MAX) ws2801_preset = 0;
-       ws2801_use_preset(ws2801_preset);*/
+*/
+     for (i=0;i<8;i++) {
+       if(keydownevent&(1<<i)) {
+         tempbuf[0] = C_ON_INPUT; tempbuf[1] = i;
+         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
+       }
+       if(keyupevent&(1<<i)) {
+         tempbuf[0] = C_ON_INPUT; tempbuf[1] = 128+i;
+         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
+       }
+     }
+     if (keydownevent == KEY_OK) {
        keypress_backlight();
        if (disp_notice[0]) {
          disp_notice_dismiss();
        } else if (myflags.in_menu) {
          menu_on_action('A');
        } else {
-         tempbuf[0] = 0x02; tempbuf[1] = 'A';
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
-         /*_delay_ms(5);
-         tempbuf[0] = 0x50; tempbuf[1] = 0xff; tempbuf[2] = 0x22; tempbuf[3] = 0x09; tempbuf[4] = 0x77;
-         rs485_message_send(0x40, 5, (uint8_t*)tempbuf);
-         ws2801_set_all(0xff, 0x22, 0x09);*/
        }
-       keyevent = 0;
+       
      }
-     if (keyevent == KEY_PREV) {
+     if (keydownevent == KEY_PREV) {
        keypress_backlight();
        if (disp_notice[0]) {
          disp_notice_dismiss();
        } else if (myflags.in_menu) {
          menu_on_nav(-1);
        } else {
-         /*ws2801_preset = 0;
-         ws2801_scroll_speed = 0;
-         ws2801_use_preset(ws2801_preset);*/
-         tempbuf[0] = 0x02; tempbuf[1] = 'B';
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
-         /*_delay_ms(5);
-         tempbuf[0] = 0x50; tempbuf[1] = 0x00; tempbuf[2] = 0x00; tempbuf[3] = 0x00; tempbuf[4] = 0x77;
-         rs485_message_send(0x40, 5, (uint8_t*)tempbuf);
-         ws2801_set_all(0x00, 0x00, 0x00);*/
        }
-       keyevent = 0;
+       
      }
-     if (keyevent == KEY_NEXT) {
+     if (keydownevent == KEY_NEXT) {
        keypress_backlight();
        if (disp_notice[0]) {
          disp_notice_dismiss();
        } else if (myflags.in_menu) {
          menu_on_nav(1);
        } else {
-         /*ws2801_scroll_speed--;
-         if (ws2801_scroll_speed > 70) ws2801_scroll_speed = 70;
-         ws2801_set_slider(ws2801_scroll_speed);
-         for(i=0;i!=ws2801_scroll_speed;i++) _delay_ms(1);
-         ws2801_scroll_timer = 0;*/
-         tempbuf[0] = 0x02; tempbuf[1] = 'C';
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
        }
-       keyevent = 0;
+       
      }
-     if (keyevent == KEY_UP) {
+     if (keydownevent == KEY_UP) {
        keypress_backlight();
        if (disp_notice[0]) {
          disp_notice_dismiss();
        } else if (myflags.in_menu) {
          menu_on_action('D');
        } else {
-         tempbuf[0] = 0x02; tempbuf[1] = 'D';
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
        }
-       /*PORTC ^= (1<<PC3);
-       while (PINA & (1<<PA4)) {_delay_us(690);PORTB ^= (1 << PB3);}
-       uint8_t sensor_id[OW_ROMCODE_SIZE];
-       uint8_t diff = OW_SEARCH_FIRST;
-       ow_reset();
-       DS18X20_find_sensor(&diff, &sensor_id[0]);
-       if (diff == OW_PRESENCE_ERR)
-           strcpy_P(&disp_tmp_buf[0], PSTR("Err:Presence     "));
-       else if (diff == OW_DATA_ERR)
-           strcpy_P(&disp_tmp_buf[0], PSTR("Err:Data         "));
-       else {
-         if ( DS18X20_start_meas( DS18X20_POWER_PARASITE, NULL ) == DS18X20_OK) {
-           _delay_ms( DS18B20_TCONV_12BIT );
-           int16_t decicelsius;
-           if ( DS18X20_read_decicelsius( &sensor_id[0], &decicelsius) == DS18X20_OK ) {
-             disp_tmp_buf[0]='T'; disp_tmp_buf[1]='e'; disp_tmp_buf[2]='m'; disp_tmp_buf[3]='p'; disp_tmp_buf[4]=':'; disp_tmp_buf[5]=' ';
-             DS18X20_format_from_decicelsius( decicelsius, &disp_tmp_buf[6], 8 );
-           } else {
-             strcpy_P(&disp_tmp_buf[0], PSTR("Err: Read        "));
-           }
-         } else {
-             strcpy_P(&disp_tmp_buf[0], PSTR("Err: StartMeasure"));
-         }
-       }
-       sprintf(&disp_tmp_buf[16], "%d bytes recv.", recv_len);
-       disp_show_buf(&disp_tmp_buf[0]);
-       for(i=0;i<50;i++) {_delay_us(300);PORTB ^= (1 << PB3);}*/
-       keyevent = 0;
+       
      }
-     if (keyevent == KEY_CANCEL) {
+     if (keydownevent == KEY_CANCEL) {
        keypress_backlight();
        if (disp_notice[0]) {
          disp_notice_dismiss();
@@ -803,15 +768,21 @@ int main (void) {            // (2)
        } else {
          RELAY_PORT = 1;
          relay_stimer = 4;
-         tempbuf[0] = 0x02; tempbuf[1] = 'E';
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
        }
-       keyevent = 0;
+       
      }
-     if (keyevent != 0) {
-       // multiple keys were pressed
-       // ignore
-       keyevent = 0;
+     if (keydownevent == KEY_DOORBELL) {
+       keypress_backlight();
+       
+       
+     }
+     if (keydownevent != 0) {
+       keydownevent = 0;
+       BUZZ(250,-5,10,1);
+     }
+     if (keyupevent != 0) {
+       keyupevent = 0;
+       BUZZ(30,1,10,1);
      }
 
    }

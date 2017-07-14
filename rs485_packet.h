@@ -1,5 +1,6 @@
 
 
+#define C_ON_INPUT  				 	0x02
 #define C_SET_OUTPUT				 	0x05
 #define C_GET_TEMPERATURE				0x40
 #define C_SET_DISPLAY				 	0x41
@@ -15,8 +16,10 @@
 #define C_BMP_TO_STRIPE_SINGLE			0x5e
 #define C_BMP_TO_STRIPE_SET_INTERVAL	0x5f
 #define C_PING							0xf1
+#define C_SET_TIME   					0xf3
 #define C_SET_BAUD_RATE					0xfc
 #define C_REBOOT_TO_BOOTLOADER			0xbf
+
 
 typedef union  {
 	uint8_t raw[RS485_BUFLEN];

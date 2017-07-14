@@ -13,7 +13,7 @@ struct {
   unsigned int cksumerr : 1;
 } recvflags;
 
-inline void receiveRS485(void) {
+void receiveRS485(void) {
 	if (recvbyte == 0xfc) { //start of packet
 		recvidx = -1;
 		//LED_RED2_PORT = 1;
