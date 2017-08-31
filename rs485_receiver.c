@@ -99,12 +99,15 @@ void rs485_message_send(uint8_t destaddr, uint8_t length, uint8_t* data) {
   end_critical_section();
 }
 
-
+// .........  start | to          from      flags len | cmd        | data				
+//ack packet: FC    | (recv.from) (recv.to) ACK   04  | (recv.cmd) | (recv.len) (recv.cksum) [arg]
 void rs485_ack(uint8_t arg) {
   recvpkg.st.data[0] = recvpkg.st.length; recvpkg.st.data[1] = recvcksum; recvpkg.st.data[2] = arg;
   rs485_message_send(recvpkg.st.fromaddr, (4 & PM_LENGTH) | PF_ACK, &recvpkg.st.command);
 }
 
+// .........  start | to          from      flags   len         | cmd        | data				
+//err packet: FC    | (recv.from) (recv.to) ACK,ERR (recv.len)  | (recv.cmd) | (recv.data)
 void rs485_error(void) {
 	rs485_message_send(recvpkg.st.fromaddr, (recvpkg.st.length & PM_LENGTH) | PF_ACK | PF_ERROR, &recvpkg.st.command);
 }

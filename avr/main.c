@@ -17,9 +17,9 @@
 #include "ds18x20.h"
 #include "onewire.h"
 
-//#include "../Irmp/irmp.h"
+#include "../Irmp/irmp.h"
 
-#include "softuart.h"
+//#include "softuart.h"
 
 /******************* port definitions ***************/
 
@@ -42,10 +42,10 @@
 
 #define LED_GREEN5_PORT REGISTER_BIT(PORTB, 1)
 #define LED_GREEN5_DDR REGISTER_BIT(DDRB, 1)
-
+/*
 #define RS485_DE_PORT REGISTER_BIT(PORTB, 0)
 #define RS485_DE_DDR REGISTER_BIT(DDRB, 0)
-
+*/
 // PORT C
 #define BACKLIT_PORT REGISTER_BIT(PORTC, 3)
 #define BACKLIT_DDR REGISTER_BIT(DDRC, 3)
@@ -66,8 +66,8 @@
 //#define ONEWIRE_PORT REGISTER_BIT(PORTD, 4)
 //#define ONEWIRE_DDR REGISTER_BIT(DDRD, 4)
 
-#define BELL_INPUT_PORT REGISTER_BIT(PORTA, 0)
-#define BELL_INPUT_DDR REGISTER_BIT(DDRA, 0)
+#define BELL_INPUT_PORT REGISTER_BIT(PORTB, 0)
+#define BELL_INPUT_DDR REGISTER_BIT(DDRB, 0)
 
 #define BUZZER_DDR REGISTER_BIT(DDRD, 4)
 
@@ -81,7 +81,7 @@
 #define rs485_finish_sending() do{  }while(0)
 
 
-#define rs485_send_byte(bt) softuart_putchar(bt)
+#define rs485_send_byte(bt) putchar(bt)
 
 //#define sendByteCk(bt) TXREG=bt; cksum^=bt; while(!PIR1bits.TXIF);
 
@@ -120,6 +120,7 @@ uint8_t redraw_mstimer = 0; //milliseconds
 uint16_t onewire_mstimer = 0; //milliseconds
 uint8_t buzzer_mstimer = 0; //milliseconds
 uint8_t key_hmstimer = 0; //milliseconds
+uint16_t bell_mstimer = 0; //milliseconds
 uint8_t keyspressed = 0, keydownevent = 0, keyupevent = 0;
 #define KEYS_MASK ((1<<PA7)|(1<<PA6)|(1<<PA5)|(1<<PA4)|(1<<PA3)|(1<<PA0))
 #define KEY_OK      (1<<PA7)
@@ -157,8 +158,9 @@ char uart_mode = '\0';
 char menu_buf[MENU_MAX_ITEMS][MENU_TXT_LEN];
 char menu_idx, menu_udata, menu_owner, menu_len;
 
+#define STRIPE2_LENGTH 19
 
-uint8_t ws2801_buf[STRIPE_LENGTH * 3 + 1];
+uint8_t ws2801_buf[STRIPE_LENGTH * 3 + STRIPE2_LENGTH * 3 + 1];
 
 char tempbuf[8];
 
@@ -170,16 +172,16 @@ uint8_t t_hour;
 int16_t decicelsius;
 
 ISR(USART_RXC_vect) {
-  //recvbyte = UDR;
-  //receiveRS485();
+  recvbyte = UDR;
+  receiveRS485();
 }
 
 
-/*
+
 ISR(TIMER0_COMP_vect) {
   //called at 12500Hz
   (void) irmp_ISR();
-}*/
+}
 
 ISR(TIMER1_COMPB_vect) {
   if (buzzer_mstimer-- == 0) {
@@ -200,6 +202,7 @@ ISR(TIMER2_COMP_vect) {
   if (redraw_mstimer>1) redraw_mstimer--;
   if (onewire_mstimer>1) onewire_mstimer--;
   if (disp_notice_scroll_mstimer>1) disp_notice_scroll_mstimer--;
+  bell_mstimer++;
   
   // trigger keyevent for newly pushed buttons
   keydownevent |= (PINA & KEYS_MASK) & ~keyspressed;
@@ -288,14 +291,15 @@ void menu_on_action(char key) {
   tempbuf[3] = menu_idx;
   rs485_message_send(menu_owner, 4, &tempbuf);
 }
-/*
+
 struct {
   uint8_t cmd;
   IRMP_DATA irmp_data;
 } irmp_data;
-*/
+
 
 int main (void) {            // (2)
+          void (*bootloader)( void ) = 0x3C00;
    ledidx_t i,j;
 /*
    uint8_t sensor_id[OW_ROMCODE_SIZE];
@@ -357,11 +361,11 @@ int main (void) {            // (2)
    lcd_data(0b00001100);
    lcd_data(0b00001000);
    lcd_data(0);
-
+/*
    initialize_output(RS485_DE_DDR);
-   RS485_DE_PORT = 0;
+   RS485_DE_PORT = 0;*/
    uart_init();
-   softuart_init();
+   //softuart_init();
 
    // Enable Interrupts
    sei();
@@ -406,13 +410,13 @@ int main (void) {            // (2)
    TIMSK |= (1<<OCIE2);  // enable interrupt on output compare
    keyspressed = 0;
 
-/*
+
    // Initialize IR timer
    // Interrupt at 12500 Hz, f_osc=8000000, prescale=1/64, compare=10
    TCCR0 = (1<<WGM01)|(1<<CS01)|(1<<CS00);
    TIMSK |= (1<<OCIE0);  // enable interrupt on output compare
    OCR0 = 10;
-*/
+
 
 
 /*     ...ausgelötet
@@ -443,10 +447,10 @@ int main (void) {            // (2)
 
    while(1) {
     // read from softuart
-    if (softuart_kbhit()) {
+    /*if (softuart_kbhit()) {
       recvbyte = softuart_getchar();
       receiveRS485();
-    }
+    }*/
 
     if (recvidx == -3) { // incoming message in recvpkg
       //PIE1bits.RCIE = 0;
@@ -597,9 +601,10 @@ int main (void) {            // (2)
           t_sec = recvpkg.st.data[2];
           rs485_ack(0xAA);
           break;
-        /*case C_REBOOT_TO_BOOTLOADER: // reboot to bootloader
-          while(1);
-          break;*/
+        case C_REBOOT_TO_BOOTLOADER: // reboot to bootloader
+          rs485_ack(0xBB);
+          bootloader();
+          break;
         default:
           if (!recvflags.broadcast) rs485_error();
           break;
@@ -646,6 +651,7 @@ int main (void) {            // (2)
      if (redraw_mstimer == 1) {
        // redraw led stripe
        ws2801_draw_buffer(&ws2801_buf[0]);
+       ws2812_sendarray(&ws2801_buf[STRIPE_LENGTH*3]);
 
        if (disp_notice[0]) {
           if (disp_notice_scroll_mstimer==1) {
@@ -696,7 +702,7 @@ int main (void) {            // (2)
         myflags.motion_det_edge = 0;
         LED_GREEN5_PORT = 0;
      }*/
-/*
+
      // infrared remote control
      if (irmp_get_data (&irmp_data.irmp_data))
      {
@@ -708,82 +714,89 @@ int main (void) {            // (2)
         irmp_data.cmd = C_ON_INPUT;
         rs485_message_send(0xff, 7, (uint8_t*)&irmp_data);
      }
-*/
-     for (i=0;i<8;i++) {
-       if(keydownevent&(1<<i)) {
-         tempbuf[0] = C_ON_INPUT; tempbuf[1] = i;
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
-       }
-       if(keyupevent&(1<<i)) {
-         tempbuf[0] = C_ON_INPUT; tempbuf[1] = 128+i;
-         rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
-       }
-     }
-     if (keydownevent == KEY_OK) {
-       keypress_backlight();
-       if (disp_notice[0]) {
-         disp_notice_dismiss();
-       } else if (myflags.in_menu) {
-         menu_on_action('A');
-       } else {
-       }
-       
-     }
-     if (keydownevent == KEY_PREV) {
-       keypress_backlight();
-       if (disp_notice[0]) {
-         disp_notice_dismiss();
-       } else if (myflags.in_menu) {
-         menu_on_nav(-1);
-       } else {
-       }
-       
-     }
-     if (keydownevent == KEY_NEXT) {
-       keypress_backlight();
-       if (disp_notice[0]) {
-         disp_notice_dismiss();
-       } else if (myflags.in_menu) {
-         menu_on_nav(1);
-       } else {
-       }
-       
-     }
-     if (keydownevent == KEY_UP) {
-       keypress_backlight();
-       if (disp_notice[0]) {
-         disp_notice_dismiss();
-       } else if (myflags.in_menu) {
-         menu_on_action('D');
-       } else {
-       }
-       
-     }
-     if (keydownevent == KEY_CANCEL) {
-       keypress_backlight();
-       if (disp_notice[0]) {
-         disp_notice_dismiss();
-       } else if (myflags.in_menu) {
-         myflags.in_menu = 0;
-       } else {
-         RELAY_PORT = 1;
-         relay_stimer = 4;
-       }
-       
-     }
-     if (keydownevent == KEY_DOORBELL) {
-       keypress_backlight();
-       
-       
-     }
-     if (keydownevent != 0) {
-       keydownevent = 0;
-       BUZZ(250,-5,10,1);
-     }
-     if (keyupevent != 0) {
-       keyupevent = 0;
-       BUZZ(30,1,10,1);
-     }
+
+      if (keydownevent != 0) {
+        if (keydownevent == KEY_OK) {
+          keypress_backlight();
+          if (disp_notice[0]) {
+            disp_notice_dismiss();
+          } else if (myflags.in_menu) {
+            menu_on_action('A');
+          } else {
+          }
+          
+        }
+        if (keydownevent == KEY_PREV) {
+          keypress_backlight();
+          if (disp_notice[0]) {
+            disp_notice_dismiss();
+          } else if (myflags.in_menu) {
+            menu_on_nav(-1);
+          } else {
+          }
+          
+        }
+        if (keydownevent == KEY_NEXT) {
+          keypress_backlight();
+          if (disp_notice[0]) {
+            disp_notice_dismiss();
+          } else if (myflags.in_menu) {
+            menu_on_nav(1);
+          } else {
+          }
+          
+        }
+        if (keydownevent == KEY_UP) {
+          keypress_backlight();
+          if (disp_notice[0]) {
+            disp_notice_dismiss();
+          } else if (myflags.in_menu) {
+            menu_on_action('D');
+          } else {
+          }
+          
+        }
+        if (keydownevent == KEY_CANCEL) {
+          keypress_backlight();
+          if (disp_notice[0]) {
+            disp_notice_dismiss();
+          } else if (myflags.in_menu) {
+            myflags.in_menu = 0;
+          } else {
+            RELAY_PORT = 1;
+            relay_stimer = 4;
+          }
+          
+        }
+        if (keydownevent == KEY_DOORBELL) {
+          keypress_backlight();
+          bell_mstimer = 0;
+        }
+
+        BUZZ(250,-5,10,1);
+        for (i=0;i<8;i++) {
+          if(keydownevent&(1<<i)) {
+            tempbuf[0] = C_ON_INPUT; tempbuf[1] = i;
+            rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
+          }
+        }
+        keydownevent = 0;
+      }
+      if (keyupevent != 0) {
+        if (keyupevent == KEY_DOORBELL) {
+          tempbuf[0] = C_ON_INPUT; tempbuf[1] = 42; tempbuf[2] = bell_mstimer>>8; tempbuf[3] = bell_mstimer&0xff;
+          rs485_message_send(0xff, 4, (uint8_t*)tempbuf);
+        }
+        
+        BUZZ(30,1,10,1);
+        for (i=0;i<8;i++) {
+          if(keyupevent&(1<<i)) {
+            tempbuf[0] = C_ON_INPUT; tempbuf[1] = 128+i;
+            rs485_message_send(0xff, 2, (uint8_t*)tempbuf);
+          }
+        }
+        keyupevent = 0;
+      }
 
    }
    
@@ -849,6 +862,7 @@ void ws2801_use_preset(uint8_t preset_idx) {
 
   }
   ws2801_draw_buffer(&ws2801_buf[0]);
+  ws2812_sendarray(&ws2801_buf[STRIPE_LENGTH*3]);
 }
 
 int uart_putc(unsigned char c)
@@ -868,16 +882,6 @@ void disp_show_buf(char *buf) {
     for(i=0;i<16;i++)lcd_data(buf[i]);
     lcd_setcursor(0,2);
     for(;i<32;i++)lcd_data(buf[i]);
-}
-
-void ws2801_set_slider(int value) {
-    ledidx_t i;
-    for(i = 0; i != STRIPE_LENGTH; i++) {
-      _ws2801_send_byte(i>=value ? 255:0);
-      _ws2801_send_byte(i>=value ? 0:255);
-      _ws2801_send_byte(i==value ? 255:0);
-    }
-
 }
 
 void ws2801_repeat_buffer(ledidx_t startIndex) {

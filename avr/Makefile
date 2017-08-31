@@ -78,9 +78,9 @@ TARGET = main
 OBJDIR = .
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c softuart.c 
+SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c ../Irmp/irmp.c light_ws2812.c
 # ../Irmp/irmp.c
-# disabled 
+# disabled  softuart.c  
 
 # List C++ source files here. (C dependencies are automatically generated.)
 CPPSRC = 
@@ -501,7 +501,7 @@ extcoff: $(TARGET).elf
 %.hex: %.elf
 	@echo
 	@echo $(MSG_FLASH) $@
-	$(OBJCOPY) -O $(FORMAT) -R .eeprom $< $@
+	$(OBJCOPY) -O $(FORMAT) --srec-len=32 -R .eeprom $< $@
 
 %.eep: %.elf
 	@echo
