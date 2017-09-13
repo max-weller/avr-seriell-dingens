@@ -1,0 +1,10 @@
+[preferences]
+geometry = 503x989+2048+49
+devices_order = rc,1e1792,06412c,-86a1f0,-lightsd,-cb8d17
+
+[mqtt]
+# username = admin
+# password = **********
+host = mqtt.local
+prefix = homie
+
