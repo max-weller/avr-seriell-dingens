@@ -11,9 +11,11 @@ tmr.create():alarm(5000, 1, function()
     
     local p = bmp085.pressure()
     --print(string.format("Pressure: %s mbar", p / 100))
-    m:publish(prefix.."barometer/pressure",p/100, 0,0)
+    m:publish(prefix.."barometer/pressure",p, 0,0)
 
     -- switch off the LED which is on the same pin as SCK
     gpio.write(5,0)
 end)
+properties["barometer/temperature"] = {dt="float", n="Temperature", u="°C"}
+properties["barometer/pressure"] = {dt="integer", n="Pressure", u="Pa"}
 

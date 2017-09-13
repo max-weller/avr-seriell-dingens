@@ -65,6 +65,9 @@ secupload_srv:listen(99, function(socket)
                 if bit.isset(flags, 0) then    -- flag 0x01: run it
                     dofile(fn)
                 end
+                if bit.isset(flags, 1) then    -- flag 0x02: compile it
+                    node.compile(fn)
+                end
                 if bit.isset(flags, 7) then    -- flag 0x80: delete the file
                     file.remove(fn)
                 end

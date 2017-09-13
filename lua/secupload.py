@@ -32,6 +32,8 @@ def main():
                         help='ip or hostname of target device')
     parser.add_argument('-k', '--key',
                         help='authentication key base64 encoded')
+    parser.add_argument('-C', '--compile',
+                        help='compile file and delete source afterwards on nodemcu')
     parser.add_argument('files', metavar='FILENAME', type=str, nargs='*',
                         help='file to upload')
                     
@@ -40,6 +42,7 @@ def main():
     if args.remove_after_do: flags |= 0x80
     if args.dofile: flags |= 0x01
     if args.restart: flags |= 0x40
+    if args.compile: flags |= 0x82
     if args.key:
         auth_key = base64.b64decode(args.key)
     else:
@@ -52,7 +55,7 @@ def main():
             sys.exit(1)
             
     if args.remove != None:
-        run_upload(None, args.remove, args.target, 0x80)
+        run_upload(None, args.remove, args.target, 0x80, auth_key)
 
     for file in args.files:
         run_upload(file, file, args.target, flags, auth_key)

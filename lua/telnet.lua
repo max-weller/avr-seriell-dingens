@@ -4,6 +4,7 @@ if telnet_srv ~= nil then
 end
 telnet_srv = net.createServer(net.TCP, 180)
 
+if mdns then mdns.register(string.format("node-%06x",node.chipid()), {service='telnet', port=23}) end
 telnet_srv:listen(23, function(socket)
     if autostart_timer ~= nil then autostart_timer:unregister() autostart_timer = nil end
 
