@@ -3,6 +3,7 @@ include('lib')
 sntp.sync()
 
 properties = {}
+datatypes = {'integer','float','boolean','string','enum'}
 mqtt_connected_handler = {}
 
 include('ws2812')
@@ -42,13 +43,14 @@ function on_mqtt_connected(client)
         if opts.u then m:publish(prefix..k..'/$unit', opts.u,0,1) end
         if opts.f then m:publish(prefix..k..'/$format', opts.f,0,1) end
         if opts.v then m:publish(prefix..k, opts.v,0,1) end
-        m:publish(prefix..k..'/$datatype', opts.dt,0,1)
+        m:publish(prefix..k..'/$datatype', datatypes[opts.dt],0,1)
         m:publish(prefix..k..'/$name', opts.n,0,1)
     end
 end
 function publish_property(propname, value)
     properties[propname]['v'] = value
     m:publish(prefix..propname, value, 0, 1)
+    usock:send(1919, "255.255.255.255", build_publish(string.rep("\0",16), propname))
 end
 function on_mqtt_error(client, reason)
     print("MQTT error",reason)
@@ -77,3 +79,31 @@ tmr.create():alarm(STATS_INTERVAL, tmr.ALARM_AUTO, publish_stats)
 
 if mdns then mdns.register(string.format("node-%06x",node.chipid()), {port=99,service='secupload',description=(DEV_NAME or "ham")}) end
 
+
+usock = net.createUDPSocket()
+usock:listen(1919)
+
+usock:on("receive", function(s, l, port, ip)
+    magic, header_hmac, header_len, command, flags, packet_offset =
+            struct.unpack(">c2 c32 I2 BB ")
+    if magic ~= "sc" or header_hmac ~= crypto.hmac("SHA256", nonce .. l:sub(35,data_offset-1), SECUPLOAD_KEY) then
+        usock:send(port,ip,buildpacket(nil, 0x46, 0, struct.pack("Bc0", 4, "AUTH"))) -- 'E' error
+        print("proto_err: "+msg)     return
+    end
+    if command == 0x80 then -- discovery request
+        usock:send(port,ip,build_discovery_response(nil))
+    elseif command == 0x8a then -- property publish/set
+        count, start = struct.unpack("I4", l, packet_offset)
+        for i = 1, count do
+            flags,datatype,k,v,start = struct.unpack("BB Bc0 xxx  Bc0", l, start)
+            if bit.isset(flags,2) and k:len()>prefix:len() and k:sub(1,prefix:len()) == prefix then
+                topic=k:sub(prefix:len()+1)
+                opts = properties[topic]
+
+                if opts ~= nil and opts['set'] ~= nil then
+                    opts['set'](topic, message)
+                end
+            end
+        end
+    end
+end)

@@ -86,10 +86,10 @@ function on_light_color_set(topic, value)
     publish_property(topic, value)
     update_light()
 end
-properties["light/on"] = {set=on_light_on_set, dt="boolean", n="LED stripe on", v="false"}
-properties["light/brightness"] = {set=on_light_color_set, dt="float", f="0:1", n="LED brightness", v="1"}
-properties["light/red"] = {set=on_light_color_set, dt="integer", f="0:255", n="Red", v="255"}
-properties["light/green"] = {set=on_light_color_set, dt="integer", f="0:255", n="Green", v="255"}
-properties["light/blue"] = {set=on_light_color_set, dt="integer", f="0:255", n="Blue", v="255"}
-properties["light/fps"] = {dt="float", u="fps", n="Update rate"}
+properties["light/on"] = {set=on_light_on_set, dt=3, u="", f="", n="LED stripe on", v="false"}
+properties["light/brightness"] = {set=on_light_color_set, dt=2, u="", f="0:1", n="LED brightness", v="1"}
+properties["light/red"] = {set=on_light_color_set, dt=1, u="", f="0:255", n="Red", v="255"}
+properties["light/green"] = {set=on_light_color_set, dt=1, u="", f="0:255", n="Green", v="255"}
+properties["light/blue"] = {set=on_light_color_set, dt=1, u="", f="0:255", n="Blue", v="255"}
+properties["light/fps"] = {dt=2, u="fps", f="", n="Update rate", v=""}
 

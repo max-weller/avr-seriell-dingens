@@ -11,7 +11,7 @@ function on_gpio_set(topic, value)
     end
 end
 for k,v in pairs(GPIO_ALIASES) do
-    properties[k.."/on"] = {set=on_gpio_set, dt="boolean", n=k.." (D"..v..")", v='false'}
+    properties[k.."/on"] = {set=on_gpio_set, dt=3, n=k.." (D"..v..")", v='false', u="", f=""}
     gpio.mode(v, gpio.OUTPUT)
     gpio.write(v, GPIO_FLAGS[k] == "i" and 1 or 0)
 end

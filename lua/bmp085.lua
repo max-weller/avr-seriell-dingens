@@ -16,6 +16,6 @@ tmr.create():alarm(5000, 1, function()
     -- switch off the LED which is on the same pin as SCK
     gpio.write(5,0)
 end)
-properties["barometer/temperature"] = {dt="float", n="Temperature", u="°C"}
-properties["barometer/pressure"] = {dt="integer", n="Pressure", u="Pa"}
+properties["barometer/temperature"] = {dt=2, n="Temperature", u="°C", f="", v=""}
+properties["barometer/pressure"] = {dt=1, n="Pressure", u="Pa", f="", v=""}
 

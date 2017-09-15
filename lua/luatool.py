@@ -23,7 +23,7 @@ from time import sleep
 import socket
 import argparse
 from os.path import basename
-
+import base64
 
 tqdm_installed = True
 try:
@@ -178,6 +178,8 @@ def decidetransport(cliargs):
     else:
         return SerialTransport(cliargs.port, cliargs.baud, cliargs.delay)
 
+def chunkstring(string, length):
+    return (string[0+i:length+i] for i in range(0, len(string), length))
 
 if __name__ == '__main__':
     # parse arguments or use defaults
@@ -260,32 +262,19 @@ if __name__ == '__main__':
     # open source file for reading
     try:
         try:
-            f = open(args.src, "rt")
+            f = open(args.src, "rb")
         except:
             import os
             base_dir = os.path.dirname(os.path.realpath(__file__))
-            f = open(os.path.join(base_dir, args.src), "rt")
+            f = open(os.path.join(base_dir, args.src), "rb")
             os.chdir(base_dir)
     except:
         sys.stderr.write("Could not open input file \"%s\"\n" % args.src)
         sys.exit(1)
 
-    # Verify the selected file will not exceed the size of the serial buffer.
-    # The size of the buffer is 256. This script does not accept files with
-    # lines longer than 230 characters to have some room for command overhead.
-    num_lines = 0
-    for ln in f:
-        if len(ln) > 230:
-            sys.stderr.write("File \"%s\" contains a line with more than 240 "
-                             "characters. This exceeds the size of the serial buffer.\n"
-                             % args.src)
-            f.close()
-            sys.exit(1)
-        num_lines += 1
-
-    # Go back to the beginning of the file after verifying it has the correct
-    # line length
-    f.seek(0)
+    filedata = list(chunkstring(base64.b64encode(f.read()), 180))
+    
+    f.close()
 
     # set serial timeout
     if args.verbose:
@@ -310,17 +299,17 @@ if __name__ == '__main__':
         transport.writeln("file.open(\"" + args.dest + "\", \"a+\")\r")
     else:
         transport.writeln("file.open(\"" + args.dest + "\", \"w+\")\r")
-    line = f.readline()
+    
     if args.verbose:
         sys.stderr.write("\r\nStage 3. Start writing data to flash memory...")
     if args.bar:
+        num_lines = len(filedata)
         for i in tqdm(range(0, num_lines)):
-            transport.writer(line.strip())
-            line = f.readline()
+            chunk = filedata[i]
+            transport.writeln("file.write(encoder.fromBase64([["+chunk+"]]))\r")
     else:
-        while line != '':
-            transport.writer(line.strip())
-            line = f.readline()
+        for chunk in filedata:
+            transport.writeln("file.write(encoder.fromBase64([["+chunk+"]]))\r")
 
     # close both files
     f.close()
@@ -334,7 +323,8 @@ if __name__ == '__main__':
         if args.verbose:
             sys.stderr.write("\r\nStage 5. Compiling")
         transport.writeln("node.compile(\"" + args.dest + "\")\r")
-        transport.writeln("file.remove(\"" + args.dest + "\")\r")
+        #transport.writeln("file.remove(\"" + args.dest + "\")\r")
+        transport.writeln("file.rename(\"" + args.dest[:-4] + ".lc\", \"" + args.dest + "\")\r")
 
     # restart or dofile
     if args.restart:
