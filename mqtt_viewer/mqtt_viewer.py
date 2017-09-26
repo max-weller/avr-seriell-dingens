@@ -144,23 +144,38 @@ class Application(tk.Frame):
 
     def mkpropertyrow(self,device,prop,propname):
         container = self
-        c1 = tk.Label(container, text=propname)
-        c2 = tk.Label(container, text=prop.get('$name',''))
+        def show_popup(event):
+            self.cur_menu_property = (device,prop,propname)
+            try:
+               self.property_menu.tk_popup(event.x_root, event.y_root, 0)
+            finally:
+               self.property_menu.grab_release()
+            
+        c1 = tk.Label(container, text=propname, width=14, anchor=tk.W)
+        c1.bind('<ButtonRelease-3>', show_popup)
+        c2 = tk.Label(container, text=prop.get('$name',''), width=20, anchor=tk.W)
+        c2.bind('<ButtonRelease-3>', show_popup)
         prop['__fieldtype'] = self.getfieldtype(prop)
         def on_change(event=None):
-            mqtt_send(device, propname, prop['v'].get())
+            if '__onchange_timer' in prop:
+                root.after_cancel(prop['__onchange_timer'])
+            def on_change_debounced():
+                mqtt_send(device, propname, prop['v'].get())
+            prop['__onchange_timer'] = root.after(5, on_change_debounced)
+            
         if prop['__fieldtype'] == 'Label':
             c3 = tk.Label(container, textvariable=prop['v'])
         elif prop['__fieldtype'] == 'Combobox':
             c3 = ttk.Combobox(container, textvariable=prop['v'])
         elif prop['__fieldtype'] == 'Scale':
-            c3 = ttk.Scale(container, orient=tk.HORIZONTAL, length=200, variable=prop['v'])
-            c3.bind('<ButtonRelease-1>', on_change)
+            c3 = tk.Scale(container, orient=tk.HORIZONTAL, length=200, 
+                variable=prop['v'], command=on_change, showvalue=False)
+            #c3.bind('<ButtonRelease-1>', on_change)
         elif prop['__fieldtype'] == 'Progressbar':
             c3 = ttk.Progressbar(container, orient=tk.HORIZONTAL, length=200, maximum=1)
         elif prop['__fieldtype'] == 'Checkbutton':
-            c3 = ttk.Checkbutton(container, text='Enable', variable=prop['v'], onvalue='true', offvalue='false', 
-                    command=on_change)
+            c3 = ttk.Checkbutton(container, text='Enable', command=on_change,
+                    variable=prop['v'], onvalue='true', offvalue='false')
         else:
             c3 = tk.Entry(container, textvariable=prop['v'])
             c3.bind('<Return>', on_change)
@@ -175,11 +190,12 @@ class Application(tk.Frame):
             c3.configure(values=prop.get('$format','').split(','))
         elif prop['__fieldtype'] == 'Scale':
             from_, to=prop.get('$format','').split(':')
-            c3.configure(from_=from_, to=to)
+            srange = float(to) - float(from_)
+            c3.configure(from_=from_, to=to, resolution=srange/255)#, bigIncrement=srange/25)
         elif prop['__fieldtype'] == 'Progressbar':
             from_, to=prop.get('$format','').split(':')
             val = (float(prop['v'].get()) - float(from_)) / (float(to) - float(from_))
-            c3.configure(value=value)
+            c3.configure(value=val)
         
         if hasattr(c3, 'state'):
             c3.state(['!disabled' if prop.get('$settable','')=='true' else 'disabled'])
@@ -241,7 +257,29 @@ class Application(tk.Frame):
         self.quit.grid(row=row,column=0)
         self.status.grid(row=row, column=1, columnspan=3)
 
-        
+    def property_menu_copy_display_name(self):
+        print(self.cur_menu_property)
+        device,prop,propname = self.cur_menu_property
+        root.clipboard_clear()
+        root.clipboard_append(prop['$name'])
+    def property_menu_copy_value(self):
+        device,prop,propname = self.cur_menu_property
+        root.clipboard_clear()
+        root.clipboard_append(prop['v'].get())
+    def property_menu_copy_topic(self):
+        device,prop,propname = self.cur_menu_property
+        topic = mqttprefix+'/'+device['$deviceId']+'/'+propname
+        root.clipboard_clear()
+        root.clipboard_append(topic)
+    def property_menu_delete(self):
+        device,prop,propname = self.cur_menu_property
+        topic = mqttprefix+'/'+device['$deviceId']+'/'+propname
+        client.publish(topic, None, retain=True)
+        client.publish(topic+'/$settable', None, retain=True)
+        client.publish(topic+'/$datatype', None, retain=True)
+        client.publish(topic+'/$format', None, retain=True)
+        client.publish(topic+'/$name', None, retain=True)
+
 
 
     def create_widgets(self):
@@ -252,6 +290,17 @@ class Application(tk.Frame):
         self.quit = tk.Button(self, text="QUIT", fg="red",
                               command=root.destroy)
         self.status = tk.Label(self, text="status", fg="green")
+
+        self.property_menu = tk.Menu(self, tearoff=0)
+        self.property_menu.add_command(label="Copy display name",
+                                    command=self.property_menu_copy_display_name)
+        self.property_menu.add_command(label="Copy value",
+                                    command=self.property_menu_copy_value)
+        self.property_menu.add_command(label="Copy full topic",
+                                    command=self.property_menu_copy_topic)
+        self.property_menu.add_command(label="Delete",
+                                    command=self.property_menu_delete)
+
         
     def update_clock(self):
         global devices_modified
