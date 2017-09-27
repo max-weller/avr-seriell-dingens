@@ -23,17 +23,7 @@ def pulse_bus_address():
 
     return address
 
-def sig_handler(state):
-    print("State changed to %s" % state)
-    if state == 0:
-        print("Pulseaudio running.")
-    elif state == 1:
-        print("Pulseaudio idle.")
-    elif state == 2:
-        print("Pulseaudio suspended")
-
 def sig_handler2(state, sender_path):
-    #print("Volume update %s" % state)
     vol_l=state[0]
     vol_r=state[1]
     print("Volume update for %s to %f/%f"%(sender_path,vol_l,vol_r))
@@ -76,10 +66,8 @@ loop = gobject.MainLoop()
 
 pulse_bus = dbus.connection.Connection(pulse_bus_address())
 pulse_core = pulse_bus.get_object(object_path='/org/pulseaudio/core1')
-pulse_core.ListenForSignal('org.PulseAudio.Core1.Device.StateUpdated', dbus.Array(signature='o'), dbus_interface='org.PulseAudio.Core1')
 pulse_core.ListenForSignal('org.PulseAudio.Core1.Device.VolumeUpdated', dbus.Array(signature='o'), dbus_interface='org.PulseAudio.Core1')
 
-pulse_bus.add_signal_receiver(sig_handler, 'StateUpdated')
 pulse_bus.add_signal_receiver(sig_handler2, 'VolumeUpdated', path_keyword='sender_path')
 
 devices = {}
@@ -93,7 +81,6 @@ for sink_path in get_prop(pulse_core, "org.PulseAudio.Core1", "Sinks"):
 	except:
 		description="<unnamed>"
 	devices[sink_path] = {'basevol':int(props['BaseVolume']), 'name':str(props['Name']), 'display_name':description,'volume':int(props['Volume'][0])}
-	
 
 class MqttHomieAdapter(MqttGObjectBridge):
 	def __init__(self, devices):
@@ -117,9 +104,6 @@ class MqttHomieAdapter(MqttGObjectBridge):
 			client_id = "pulseaudio-mqtt",
 			user = config.get('mqtt', 'username', fallback=None), 
 			passwd = config.get('mqtt', 'password', fallback=None))
-		
-
-
 
 	def _on_message(self, client, userdata, msg):
 		global devices_modified
@@ -133,7 +117,6 @@ class MqttHomieAdapter(MqttGObjectBridge):
 				for path,dev in self.devices.items():
 					if dev['name'] == node:
 						pulse_set_volume(path, float(payload)*dev['basevol'])
-				
 
 	def _on_connect(self, client, userdata, dict, rc):
 		print("Connected with result code " + str(rc))
@@ -148,7 +131,7 @@ class MqttHomieAdapter(MqttGObjectBridge):
 			client.publish(self.realm+dev['name']+'/volume/$datatype', 'float', retain=True)
 			client.publish(self.realm+dev['name']+'/volume/$format', '0:1.5', retain=True)
 			self.publish_volume(dev_path, dev['volume'])
-			
+
 	def publish_volume(self, dev_path, vol):
 		dev=self.devices[dev_path]
 		vol = vol / dev['basevol']
