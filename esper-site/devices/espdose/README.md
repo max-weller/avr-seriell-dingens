@@ -1,0 +1,1 @@
+Firmware für die lokal entstandene 2er Steckdosenleiste von psyke.
