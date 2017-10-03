@@ -22,6 +22,12 @@ ul li input[type=text] { float: right; }
 ul li span { float: right; font-weight: bold; font-family: monospace; }
 ul li small { font-size: 7pt; color: #666; }
 #login form { padding: 20px;  }
+@media screen and (min-width: 800px) {
+    h4 { border-top: 0; }
+    .device .innerDiv { margin: 20px; box-shadow: 0 0 10px #aaa; }
+    .device { padding: 1px; break-inside: avoid-column; }
+    #devices { column-width: 350px; }
+}
 </style>
 </head>
 <body>
@@ -31,6 +37,7 @@ ul li small { font-size: 7pt; color: #666; }
 <script type="text/x-tmpl" id="device-list-template">
 {% iterate(o.devices, filterEmptyAndOffline, (deviceId, device) => { %}
 
+<div class="device"><div class="innerDiv">
 <h4>{%= device.attrs['$name'] %} &nbsp; 
     <small>fw={%= device.attrs['$fw/name'] %} {%= device.attrs['$fw/version'] %},  id={%= deviceId %}</small>
 </h4>
@@ -58,6 +65,7 @@ ul li small { font-size: 7pt; color: #666; }
     </label></li>
 {% }); %}
 </ul>
+</div></div>
 
 {% }); %}
 </script>
