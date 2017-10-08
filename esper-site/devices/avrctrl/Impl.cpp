@@ -55,15 +55,22 @@ public:
         udp.listen(UdpSerialPort);
 
         this->add(&(this->dsSensor));
-        this->registerSubscription(Device::TOPIC_BASE + "/buzzer/set", Device::MessageCallback(&AvrCtrl::onAction_Buzzer, this));
-        this->registerSubscription(Device::TOPIC_BASE + "/display/set", Device::MessageCallback(&AvrCtrl::onAction_Display, this));
+        this->registerProperty(Device::TOPIC_BASE + "buzzer",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Buzzer, this), PropertyDataType::String, "", "", ""));
+        this->registerProperty(Device::TOPIC_BASE + "display",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Display, this), PropertyDataType::String, "", "", ""));
         
-        this->registerSubscription(Device::TOPIC_BASE + "/door/set", Device::MessageCallback(&AvrCtrl::onAction_Output, this));
-        this->registerSubscription(Device::TOPIC_BASE + "/backlight/set", Device::MessageCallback(&AvrCtrl::onAction_Output, this));
-        this->registerSubscription(Device::TOPIC_BASE + "/led1/set", Device::MessageCallback(&AvrCtrl::onAction_Output, this));
-        this->registerSubscription(Device::TOPIC_BASE + "/led2/set", Device::MessageCallback(&AvrCtrl::onAction_Output, this));
-        this->registerSubscription(Device::TOPIC_BASE + "/led3/set", Device::MessageCallback(&AvrCtrl::onAction_Output, this));
-
+        this->registerProperty(Device::TOPIC_BASE + "door",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
+        this->registerProperty(Device::TOPIC_BASE + "backlight",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
+        this->registerProperty(Device::TOPIC_BASE + "led1",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
+        this->registerProperty(Device::TOPIC_BASE + "led2",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
+        this->registerProperty(Device::TOPIC_BASE + "led3",
+                NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
+        
         if(!Serial.setCallback(StreamDataReceivedDelegate(&AvrCtrl::onSerialData, this))) {
             debug_e("ERROR: Serial callback registration failed!");
         }
