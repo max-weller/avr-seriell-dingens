@@ -2,11 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import paho.mqtt.client
-import gobject
-from dbus.mainloop.glib import DBusGMainLoop
-from mqtt_gobject_bridge import MqttGObjectBridge
+from mqtt_helper import MqttHelper
 import time, socket, binascii, os, configparser, logging
-
+from threading import Thread
 import broadlink
 
 devices = broadlink.discover(timeout=5)
@@ -16,20 +14,18 @@ for device in devices:
     device.current_state = device.check_power()
 
 def check_device_states():
-    for device in devices:
-        state = device.check_power()
-        print(device.mac_addr_str, device.current_state, state)
-        if device.current_state != state:
-            device.current_state = state
-            adapter.publish_state_change(device)
-    return True
+	while True:
+		for device in devices:
+			state = device.check_power()
+			print(device.mac_addr_str, device.current_state, state)
+			if device.current_state != state:
+				device.current_state = state
+				adapter.publish_state_change(device)
+		time.sleep(10)
 
-DBusGMainLoop(set_as_default=True)
+Thread(target=check_device_states).start()
 
-loop = gobject.MainLoop()
-gobject.timeout_add(10000, check_device_states)
-
-class MqttHomieAdapter(MqttGObjectBridge):
+class MqttHomieAdapter(MqttHelper):
 	def __init__(self, devices):
 		CONFIG_FILE="mqtt_viewer.ini"
 		config = configparser.ConfigParser()
@@ -45,7 +41,7 @@ class MqttHomieAdapter(MqttGObjectBridge):
 		self.devices = devices
 		
 		logging.info("Connecting to MQTT...")
-		MqttGObjectBridge.__init__(self,
+		MqttHelper.__init__(self,
 			mqtt_server = config.get('mqtt', 'host'), 
 			mqtt_port = config.getint('mqtt', 'port', fallback=1883), 
 			client_id = "broadlink-mqtt",
