@@ -12,10 +12,7 @@ import socket
 import ssl
 import sys
 import traceback
-
-
 from ve_utils import exit_on_error
-
 
 class MqttGObjectBridge(object):
 	def __init__(self, mqtt_server=None, mqtt_port=None, client_id="", ca_cert=None, user=None, passwd=None):

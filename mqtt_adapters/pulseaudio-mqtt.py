@@ -122,6 +122,8 @@ class MqttHomieAdapter(MqttGObjectBridge):
 		print("Connected with result code " + str(rc))
 
 		client.publish(self.lwt_topic, 'true', retain=True)
+		client.publish(self.realm+'$fw/name', 'pulseaudio-mqtt', retain=True)
+		client.publish(self.realm+'$name', 'Lautstärkeregler', retain=True)
 		
 		client.subscribe(self.realm+"#")
 		for dev_path, dev in self.devices.items():
