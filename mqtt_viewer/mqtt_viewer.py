@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import tkinter as tk
-from tkinter import ttk, tix
+from tkinter import ttk, tix, simpledialog
 import json,re
 import paho.mqtt.client
 import time
@@ -25,12 +25,20 @@ devices={}
 devices_modified=False
 
 def on_message(client, userdata, msg):
-    global devices_modified
     payload = msg.payload.decode('utf-8')
-    
-    topic=msg.topic.split("/")
+    topic = msg.topic.split("/")
+    try:
+        handleMessage(topic, payload)
+    except Exception as ex:
+        print("Error while handling message")
+        print("Topic: ",msg.topic)
+        print("Payload: ",msg.payload)
+        print("Exception: ",ex)
+
+def handleMessage(topic, payload):
+    global devices_modified
     if len(topic)<3:
-        print("ignoring short topic", msg.topic, payload)
+        print("ignoring short topic", topic, payload)
         return
     if topic[0] == mqttprefix:
         deviceId = topic[1]
@@ -59,7 +67,7 @@ def on_message(client, userdata, msg):
             device['properties'][propname]['v'].set(payload)
             #if '__row' in device['properties'][propname]:
         else:
-            print("ignoring msg", msg.topic, payload)
+            print("ignoring msg", topic, payload)
 
 def mqtt_send(device, prop_name, value):
     print("Publishing ",mqttprefix+'/'+device['$deviceId']+'/'+prop_name+'/set', value)
@@ -107,32 +115,43 @@ class Application(tk.Frame):
         device['__showdetail']=not device.get('__showdetail',False)
         self.update_widgets()
 
+    def change_device_name(self,device):
+        attrs=', '.join([k+'='+v for k, v in device['attrs'].items()])
+        old_name = device['attrs'].get('$name','(unnamed)')
+        new_name = simpledialog.askstring("Device name", attrs, initialvalue=old_name)
+        if new_name != None:
+            client.publish(mqttprefix+'/'+device['$deviceId']+'/$name', new_name, retain=True)
+
     def mkdeviceheader(self,device):
         container = self
         c1 = tk.Button(container, command=lambda: self.collapse_device(device))
         c1.bind('<ButtonRelease-3>', lambda e: self.show_device_detail(device))
 
         c2 = tk.Button(container, text=device['attrs'].get('$name','(unnamed)'))
+        c2.bind('<ButtonRelease-3>', lambda e: self.change_device_name(device))
 
-        #c3 = tk.Label(container, text=attrs)
-        #c3 = ttk.Combobox(container)
-        c3 = tk.Text(container, width=70, height=3)
-        device['__header'] = [c1,c2,c3]
+        c3 = tk.Label(container, text="fwInfo")
+
+        detailsbox = tk.Text(container, width=70, height=3)
+        device['__header'] = [c1,c2,c3,detailsbox]
 
     def updatedeviceheader(self,device,row):
-        c1,c2,c3 = device['__header']
+        c1,c2,c3,detailsbox = device['__header']
         c1.configure(bg='red' if device['attrs'].get('$online','false')!='true' else 'lightgreen',
                 text=('▶' if device.get('__collapsed') else '▼')+' '+device['$deviceId'])
         c2.configure( text=device['attrs'].get('$name','(unnamed)'))
+
+        fwInfo = device['attrs'].get('$fw/name','') + ' ' + device['attrs'].get('$fw/version','')
+        c3.configure( text=fwInfo)
+
         attrs=', '.join([k+'='+v for k, v in device['attrs'].items()])
-        c3.delete(1.0, tk.END); c3.insert(tk.END, attrs)
-        #attrs=[k+'='+v for k, v in device['attrs'].items() if k!='$online' and k!='$name']
-        #c3.configure(values=attrs)
+        detailsbox.delete(1.0, tk.END); detailsbox.insert(tk.END, attrs)
+        
         self.rowformat(device, row, device['__header'], False)
         if device.get('__showdetail'):
-            c3.grid(row=row+1,column=0,columnspan=4)
+            detailsbox.grid(row=row+1,column=0,columnspan=4)
         else:
-            c3.grid_remove()
+            detailsbox.grid_remove()
         return row+2
 
     def rowformat(self, device, row, cols, collapse):
@@ -149,7 +168,8 @@ class Application(tk.Frame):
             try:
                self.property_menu.tk_popup(event.x_root, event.y_root, 0)
             finally:
-               self.property_menu.grab_release()
+                pass
+               #self.property_menu.grab_release()
             
         c1 = tk.Label(container, text=propname, width=14, anchor=tk.W)
         c1.bind('<ButtonRelease-3>', show_popup)
@@ -245,6 +265,9 @@ class Application(tk.Frame):
         for dev_id in self.devices_order:
             if not dev_id in devices: continue
             device = devices[dev_id]
+            # skip offline devices with no properties
+            if device['attrs'].get('$online','false') == 'false' and len(device['properties'])==0: continue
+
             if not '__header' in device: self.mkdeviceheader(device)
             row = self.updatedeviceheader(device, row)
 
@@ -300,6 +323,7 @@ class Application(tk.Frame):
                                     command=self.property_menu_copy_topic)
         self.property_menu.add_command(label="Delete",
                                     command=self.property_menu_delete)
+        #self.property_menu.bind("<FocusOut>", lambda e:rcmenu.unpost())
 
         
     def update_clock(self):
