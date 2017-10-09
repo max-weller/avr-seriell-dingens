@@ -3,18 +3,30 @@
 <head>
 <title>MQTT WebUI</title>
 <meta name="viewport" content="width=device-width">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" sizes="128x128" href="icons/mqtt_viewer.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" sizes="128x128" href="icons/mqtt_viewer_sq.png">
+
 <script>
-var MQTT_HOST = "10.83.42.11";
+var MQTT_HOST = location.hostname;
+if (!MQTT_HOST) MQTT_HOST = "[2001:470:73d9:81:208:9bff:fed5:ce21]";
+if (location.search) MQTT_HOST = location.search.substr(1);
 var MQTT_USERNAME = "webui";
+document.documentElement.className += 
+(("ontouchstart" in document.documentElement) ? ' touch' : ' no-touch');
 </script>
 <style>
 html, body { margin: 0; padding: 0; }
 #topbar { height: 5px; width: 100%; }
 body {font-family: sans-serif;}
-h4 { border-top: 1px solid #888; margin: 0 0; padding: 10px 20px 4px; background: #eee; font-weight: normal; }
-h4 small { float: right; }
+h4 { border-top: 1px solid #999; margin: 0 0; padding: 10px 20px 4px; background: #eee; font-weight: normal; }
+h4 small { float: right; font-size: 7pt; }
+h4 span { padding: 2px 7px; background: rgba(0,0,0,0.5); color: white; }
+h4 img{ margin: -5px 0 0; vertical-align: middle; }
 ul { margin: 0; padding: 0; list-style: none; }
-ul li label { display: block; padding: 3px 20px; border-top: 1px solid #888; }
+ul li label { display: block; padding: 2px 20px; border-top: 1px solid #999; transition: background-color 0.5s; }
+.touch ul li.prop-settable label { padding: 5px 20px; }
 ul li input[type=range] { display: block; width: 100%; }
 ul li input[type=checkbox] { float: right; }
 ul li input[type=number] { float: right; text-align: right; }
@@ -24,9 +36,9 @@ ul li small { font-size: 7pt; color: #666; }
 #login form { padding: 20px;  }
 @media screen and (min-width: 800px) {
     h4 { border-top: 0; }
-    .device .innerDiv { margin: 20px; box-shadow: 0 0 10px #aaa; }
-    .device { padding: 1px; break-inside: avoid-column; }
-    #devices { column-width: 350px; }
+    .device .innerDiv { margin: 10px; box-shadow: 0 0 10px #aaa; }
+    .device { padding: 1px; break-inside: avoid; }
+    #devices { margin: 10px; column-width: 350px; column-gap: 10px; }
 }
 </style>
 </head>
@@ -35,34 +47,38 @@ ul li small { font-size: 7pt; color: #666; }
 <div id="devices"></div>
 
 <script type="text/x-tmpl" id="device-list-template">
-{% iterate(o.devices, filterEmptyAndOffline, (deviceId, device) => { %}
+{% iterate(o.devices, filterEmptyAndOffline, function(deviceId, device) { %}
 
 <div class="device"><div class="innerDiv">
-<h4>{%= device.attrs['$name'] %} &nbsp; 
-    <small>fw={%= device.attrs['$fw/name'] %} {%= device.attrs['$fw/version'] %},  id={%= deviceId %}</small>
+<h4 style="background-color: #{%= deviceId %}">
+    <img src="icons/{%= device.attrs['$fw/name'] %}.png" width="24" height="24">
+    <span>{%= device.attrs['$name'] %}&nbsp;</span> 
+    <small><span>fw={%= device.attrs['$fw/name'] %} {%= device.attrs['$fw/version'] %}</span> &nbsp; <span>id={%= deviceId %}</span></small>
 </h4>
 
 <ul>
-{% iterate(device.properties, (propName, prop) => { %}
-    <li class="property prop-type-{%= prop['$datatype'] %}"><label><strong>{%= prop['$name'] %}</strong>
-    <small>{%=propName%}</small>
-    {% if (prop['$datatype'] == 'boolean') { %}
-    <input type="checkbox" id="value:{%= prop.id %}"
-        onchange="propertySet('{%= deviceId %}/{%= propName %}', this.checked?'true':'false')">
-    {% } else if (prop['$settable'] !== 'true') { %}
-    <span id="value:{%= prop.id %}"></span>
-    {% } else if (isRangeProperty(prop)) { %}
-    <input type="range" min="{%= getRange(prop)[0] %}" max="{%= getRange(prop)[1] %}" step="0.01"
-        id="value:{%= prop.id %}"
-        onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
-    {% } else if (prop['$datatype'] == 'float' || prop['$datatype'] == 'integer') { %}
-    <input type="number" id="value:{%= prop.id %}"
-        onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
-    {% } else { %}
-    <input type="text" id="value:{%= prop.id %}"
-        onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
-    {% } %}
-    </label></li>
+{% iterate(device.properties, function(propName, prop) { %}
+    <li class="property prop-type-{%= prop['$datatype'] %} prop-{%= prop['$settable'] === 'true' ? 'settable' : 'readonly' %}">
+        <label><strong>{%= prop['$name'] %}</strong>
+        <small>{%=propName%}</small>
+        {% if (prop['$datatype'] == 'boolean') { %}
+        <input type="checkbox" id="value:{%= prop.id %}"
+            onchange="propertySet('{%= deviceId %}/{%= propName %}', this.checked?'true':'false')">
+        {% } else if (prop['$settable'] !== 'true') { %}
+        <span id="value:{%= prop.id %}"></span>
+        {% } else if (isRangeProperty(prop)) { %}
+        <input type="range" min="{%= getRange(prop)[0] %}" max="{%= getRange(prop)[1] %}" step="0.01"
+            id="value:{%= prop.id %}"
+            onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
+        {% } else if (prop['$datatype'] == 'float' || prop['$datatype'] == 'integer') { %}
+        <input type="number" id="value:{%= prop.id %}"
+            onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
+        {% } else { %}
+        <input type="text" id="value:{%= prop.id %}"
+            onchange="propertySet('{%= deviceId %}/{%= propName %}', this.value)">
+        {% } %}
+        </label>
+    </li>
 {% }); %}
 </ul>
 </div></div>
@@ -83,13 +99,14 @@ if (!localStorage.uuid) localStorage.uuid = "webui-"+uuidv4();
 
 var mqttprefix = "ham";
 var devices = {};
+var device_modified_attributes = ['$online', '$name', '$fw/name', '$fw/version'];
 
 function setIndicator(color) {
     document.getElementById("topbar").style.backgroundColor=color;
 }
 function blink(color) {
     setIndicator(color);
-    setTimeout(()=>{ setIndicator("#bbbbbb");}, 500);
+    setTimeout(function(){ setIndicator("#bbbbbb");}, 500);
 }
 
 //--> Renderer
@@ -100,8 +117,8 @@ setInterval(function() {
 
     var container = document.getElementById("devices");
     container.innerHTML = tmpl("device-list-template", {'devices': devices});
-    iterate(devices, filterEmptyAndOffline, (deviceId, device) => {
-        iterate(device.properties, (propName, prop) => {
+    iterate(devices, filterEmptyAndOffline, function(deviceId, device) {
+        iterate(device.properties, function(propName, prop) {
             propertyChangeReceived(prop);
         });
     });
@@ -115,7 +132,7 @@ document.getElementById("loginform").addEventListener("submit", function() {
     localStorage.mqtt_pw = document.getElementById("pwfield").value;
     document.getElementById("devices").innerHTML="";
     devices={};
-    client.connect({onSuccess:onConnect, onFailure:err, userName:"webui", password:document.getElementById("pwfield").value});
+    connectMqtt();
 }, false);
 try {
 devices = JSON.parse(localStorage.devices);
@@ -128,6 +145,11 @@ function propertyChangeReceived(prop) {
     if(el.type=='checkbox') el.checked = prop.v=='true';
     else if ('value' in el) el.value = prop.v;
     else if ('innerText' in el) el.innerText = prop.v + (prop['$unit'] ? ' '+prop['$unit'] : '');
+    if(prop.blink) {
+        el.parentNode.style.backgroundColor = prop.blink;
+        setTimeout(function(){el.parentNode.style.backgroundColor = '';},500);
+        prop.blink=false;
+    }
 }
 
 //--> MQTT Connection Manager
@@ -135,17 +157,26 @@ function propertyChangeReceived(prop) {
 client = new Paho.MQTT.Client(MQTT_HOST, 1884, localStorage.uuid);
 
 // set callback handlers
-client.onConnectionLost = onConnectionLost;
+client.onConnectionLost = err;
 client.onMessageArrived = onMessageArrived;
 
-// connect the client
-client.connect({onSuccess:onConnect, onFailure:err, userName:"webui", password:document.getElementById("pwfield").value});
+function connectMqtt() {
+    setIndicator("#ffff00");
+    // connect the client
+    client.connect({onSuccess:onConnect, onFailure:err, userName:"webui", password:document.getElementById("pwfield").value, keepAliveInterval: 40});
+}
+connectMqtt();
 
+var reconnectTimeout = 5;
 function err(err) {
     setIndicator("#ff0000");
-    console.log("connection failed",err.errorCode,err.errorMessage);
-    document.getElementById("devices").innerHTML="";
+    console.log("connection failed/lost",err.errorCode,err.errorMessage);
+    document.getElementById("devices").innerHTML="<center>connection error<br><br>"+err.errorMessage+"<br><br>reconnecting in "+reconnectTimeout+" seconds...</center>";
     devices={};
+    setTimeout(function() {
+        connectMqtt();
+    }, reconnectTimeout*1000);
+    reconnectTimeout+=5;
 }
 // called when the client connects
 function onConnect() {
@@ -155,12 +186,6 @@ function onConnect() {
   client.subscribe(mqttprefix+"/#");
 }
 
-// called when the client loses its connection
-function onConnectionLost(responseObject) {
-  if (responseObject.errorCode !== 0) {
-    console.log("onConnectionLost:"+responseObject.errorMessage);
-  }
-}
 
 // called when a message arrives
 function onMessageArrived(message) {
@@ -199,8 +224,8 @@ function handleMessage(topic, payload) {
         if (topic[2][0] == "$") { //#device attribute
             var attrname = topic.slice(2).join("/");
             console.log("updating device attr", deviceId, attrname, payload);
+            if (attrname !== device['attrs'][attrname]) devices_modified=true;
             device['attrs'][attrname] = payload;
-            devices_modified=true;
         } else if (topic.length==5 && topic[4][0] == "$") { //# property attribute
             var propname = topic[2] + "/" + topic[3];
             var attrname = topic[4];
@@ -209,6 +234,7 @@ function handleMessage(topic, payload) {
         } else if (topic.length==4) { //#property value
             var propname = topic[2] + "/" + topic[3];
             var prop = getOrCreateProperty(device, propname);
+            prop.blink = (prop.v == payload) ? '#fff6ea' : '#fd8';
             prop.v = payload;
             propertyChangeReceived(prop);
         } else {
@@ -240,7 +266,7 @@ function isRangeProperty(prop) {
 
 //==> Helper
 function iterate(dictionary, filter, cb) {
-    if (cb === undefined) { cb = filter; filter = (x) => true; }
+    if (cb === undefined) { cb = filter; filter = function(x) { return true; }; }
     for (var key in dictionary) {
         if (dictionary.hasOwnProperty(key) && filter(dictionary[key])) {
             cb(key, dictionary[key]);
