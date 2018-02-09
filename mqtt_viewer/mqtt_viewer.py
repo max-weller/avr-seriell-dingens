@@ -3,16 +3,19 @@
 
 import tkinter as tk
 from tkinter import ttk, tix, simpledialog
-import json,re
+import json,re,socket,struct,base64
 import paho.mqtt.client
 import time
-import configparser
+import os,configparser
+import tlv_parser as tlv
+from threading import Thread
 
-CONFIG_FILE="mqtt_viewer.ini"
+CONFIG_FILE=os.path.join(os.path.expanduser("~"), '.config/mqtt_viewer.ini')
 config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
 if not config.has_section('preferences'): config.add_section('preferences')
 if not config.has_section('mqtt'): config.add_section('mqtt')
+if not config.has_section('hsc'): config.add_section('hsc')
 
 mqttprefix=config.get('mqtt', 'prefix')
 
@@ -21,8 +24,85 @@ def on_connect(client, userdata, flags, rc):
 
     client.subscribe(mqttprefix+"/#")
 
+hsckey = base64.b64decode(config.get('hsc', 'key'))
 devices={}
 devices_modified=False
+
+
+def hsc_discovery_request():
+    hsc_sock.sendto(tlv.hmactlv(tlv.gettlv([ [tlv.T_DISCO_REQUEST,b""] ]), hsckey), ("255.255.255.255",UDP_PORT))
+    hsc_sock.sendto(tlv.hmactlv(tlv.gettlv([ [tlv.T_DISCO_REQUEST,b""] ]), hsckey), (MCAST_GROUP,UDP_PORT))
+
+def hsc_parse_discovery_response(tdec, sourceip):
+    propname = None
+    for tag,value in tdec:
+        print("%04x = %s"%(tag,value.decode("utf-8")))
+        if tag == tlv.T_PROP_NAME:
+            propname = (mqttprefix + value.decode("utf-8")).split("/")
+        elif propname == None:
+            print("ignoring tag, propname is required")
+        elif tag == tlv.T_PROP_VALUE:
+            handleMessage(propname, value.decode("utf-8"))
+        elif tag == tlv.T_PROP_FORMAT:
+            handleMessage(propname + ["$format"], value.decode("utf-8"))
+        elif tag == tlv.T_PROP_UNIT:
+            handleMessage(propname + ["$unit"], value.decode("utf-8"))
+        elif tag == tlv.T_PROP_DISPLAYNAME:
+            handleMessage(propname + ["$name"], value.decode("utf-8"))
+        elif tag == tlv.T_PROP_FLAGS:
+            dtype = value[1]
+            dflags = value[0]
+            print("flags",dtype,dflags)
+            if (dflags & 2) == 2:
+                handleMessage(propname + ["$settable"], "true")
+                handleMessage(propname[:-2] + ["$ip"], sourceip)
+                handleMessage(propname + ["$datatype"], "command")
+            else:
+                handleMessage(propname + ["$datatype"], datatypes[dtype])
+                if (dflags & 1) == 1:
+                    handleMessage(propname + ["$settable"], "true")
+                    handleMessage(propname[:-2] + ["$ip"], sourceip)
+
+
+datatypes=["unknown","integer","float","boolean","string","enum"]
+def hsc_receive_thread_fn(sock):
+    while True:
+        data, addr = sock.recvfrom(1024)
+        tdata = tlv.parsetlv(data)
+        tdec = tlv.decodetlv(tdata, [hsckey])
+        if not tdec:
+            print("decode_failed",tdata)
+            
+        print("received packet")
+        tlv.dumptlv(tdec)
+        if tlv.hastag(tdec, tlv.T_DISCO_RESPONSE):
+            hsc_parse_discovery_response(tdec, addr[0])
+
+UDP_PORT = config.get('hsc', 'udpport', fallback=19691)
+MCAST_GROUP = config.get('hsc', 'multicastgroup', fallback="224.0.0.91")
+MCAST_IFACE = config.get('hsc', 'interface', fallback="br0")
+addrinfo = socket.getaddrinfo(MCAST_GROUP, None)[0]
+hsc_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+hsc_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+hsc_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+hsc_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+hsc_sock.bind(("0.0.0.0", UDP_PORT))
+group_bin = socket.inet_pton(addrinfo[0], MCAST_GROUP)
+mreq = struct.pack('4sL', group_bin, socket.if_nametoindex(MCAST_IFACE))
+hsc_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+
+addrinfo = socket.getaddrinfo("0.0.0.0", None)[0]
+bcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+bcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+bcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+bcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+bcast_sock.bind(("0.0.0.0", UDP_PORT))
+
+receive_thread = Thread(target=hsc_receive_thread_fn, args=(hsc_sock,))
+receive_thread.setDaemon(True)
+receive_thread.start()
+
+
 
 def on_message(client, userdata, msg):
     payload = msg.payload.decode('utf-8')
@@ -37,6 +117,7 @@ def on_message(client, userdata, msg):
 
 def handleMessage(topic, payload):
     global devices_modified
+    print(topic,payload)
     if len(topic)<3:
         print("ignoring short topic", topic, payload)
         return
@@ -72,6 +153,16 @@ def handleMessage(topic, payload):
 def mqtt_send(device, prop_name, value):
     print("Publishing ",mqttprefix+'/'+device['$deviceId']+'/'+prop_name+'/set', value)
     client.publish(mqttprefix+'/'+device['$deviceId']+'/'+prop_name+'/set', value)
+
+    tlvdata = [ [tlv.T_DISCO_SET,b""],
+        [tlv.T_PROP_NAME, ('/'+device['$deviceId']+'/'+prop_name).encode("utf8")],
+        [tlv.T_PROP_VALUE, value.encode("utf8")], ]
+    tlv.dumptlv(tlvdata)
+    hsc_sock.sendto(tlv.hmactlv(tlv.gettlv(tlvdata), hsckey), ("255.255.255.255",UDP_PORT))
+    hsc_sock.sendto(tlv.hmactlv(tlv.gettlv(tlvdata), hsckey), (MCAST_GROUP,UDP_PORT))
+    if '$ip' in device['attrs']:
+        hsc_sock.sendto(tlv.hmactlv(tlv.gettlv(tlvdata), hsckey), (device['attrs']['$ip'],UDP_PORT))
+
 
 
 client = paho.mqtt.client.Client()
@@ -183,6 +274,8 @@ class Application(tk.Frame):
                 mqtt_send(device, propname, prop['v'].get())
             prop['__onchange_timer'] = root.after(5, on_change_debounced)
             
+        if prop['__fieldtype'] == 'Button':
+            c3 = tk.Button(container, textvariable=prop.get('$name','Go!'), command=on_change)
         if prop['__fieldtype'] == 'Label':
             c3 = tk.Label(container, textvariable=prop['v'])
         elif prop['__fieldtype'] == 'Combobox':
@@ -230,7 +323,9 @@ class Application(tk.Frame):
         dt = prop.get('$datatype','')
         fmt = prop.get('$format','')
         edit = prop.get('$settable','')=='true'
-        if dt == 'enum':
+        if dt == 'command':
+            return 'Button'
+        elif dt == 'enum':
             if edit:
                 values = fmt.split(',')
                 if len(values) > 4:
@@ -345,6 +440,8 @@ try:
     root.geometry(config['preferences']['geometry'])
 except:
     pass
+
+hsc_discovery_request()
 
 app.mainloop()
 

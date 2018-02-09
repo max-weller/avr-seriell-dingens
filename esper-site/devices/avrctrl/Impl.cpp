@@ -40,7 +40,6 @@ public:
             ntp("0.de.pool.ntp.org", 86400)
             {
         
-
         Serial1 = new HardwareSerial(UART1);
         Serial1->begin(76800);
         delay(50);
@@ -55,20 +54,20 @@ public:
         udp.listen(UdpSerialPort);
 
         this->add(&(this->dsSensor));
-        this->registerProperty(Device::TOPIC_BASE + "buzzer",
+        this->registerProperty(Device::TOPIC_BASE + "/board/buzzer",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Buzzer, this), PropertyDataType::String, "", "", ""));
-        this->registerProperty(Device::TOPIC_BASE + "display",
+        this->registerProperty(Device::TOPIC_BASE + "/board/display",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Display, this), PropertyDataType::String, "", "", ""));
         
-        this->registerProperty(Device::TOPIC_BASE + "door",
+        this->registerProperty(Device::TOPIC_BASE + "/door/open",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
-        this->registerProperty(Device::TOPIC_BASE + "backlight",
+        this->registerProperty(Device::TOPIC_BASE + "/board/backlight",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
-        this->registerProperty(Device::TOPIC_BASE + "led1",
+        this->registerProperty(Device::TOPIC_BASE + "/board/led1",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
-        this->registerProperty(Device::TOPIC_BASE + "led2",
+        this->registerProperty(Device::TOPIC_BASE + "/board/led2",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
-        this->registerProperty(Device::TOPIC_BASE + "led3",
+        this->registerProperty(Device::TOPIC_BASE + "/board/led3",
                 NodeProperty(Device::MessageCallback(&AvrCtrl::onAction_Output, this), PropertyDataType::Boolean, "", "", ""));
         
         if(!Serial.setCallback(StreamDataReceivedDelegate(&AvrCtrl::onSerialData, this))) {
@@ -89,17 +88,17 @@ public:
 
     void onAction_Output(const String& topic, const String& message) {
         uint8_t cmd [] = { C_SET_OUTPUT };
-        if (message == "1") cmd[2] = 0xff; else cmd[2] = 0x00;
+        if (message == "true") cmd[2] = 0xff; else cmd[2] = 0x00;
         
-        if (topic == "door/set") cmd[1] = 0x10;
-        else if (topic == "backlight/set") cmd[1] = 0x0f;
-        else if (topic == "led1/set") cmd[1] = 0x01;
-        else if (topic == "led2/set") cmd[1] = 0x02;
-        else if (topic == "led3/set") cmd[1] = 0x03;
+        if (topic == "door/open") cmd[1] = 0x10;
+        else if (topic == "board/backlight") cmd[1] = 0x0f;
+        else if (topic == "board/led1") cmd[1] = 0x01;
+        else if (topic == "board/led2") cmd[1] = 0x02;
+        else if (topic == "board/led3") cmd[1] = 0x03;
         else debug_e("ERROR: unknown topic %s", topic.c_str());
         
         rs485_message_send(0x41, 3, cmd);
-        publish(topic.substring(0, topic.length() - 3) + "state", cmd[2] == 0xff ? "1" : "0");
+        publish(Device::TOPIC_BASE + "/" + topic, cmd[2] == 0xff ? "true" : "false");
     }
 
     void onAction_Buzzer(const String& topic, const String& message) {
@@ -126,10 +125,14 @@ public:
             udp.sendStringTo(IPAddress(255,255,255,255), UdpSerialPort, recvpkghexbuf);
         }
 
-        if (recvpkg.st.command == C_ON_INPUT) {
-            char topic[10];
-            sprintf(topic, "button/%d", recvpkg.st.data[0]);
-            publish(topic, "");
+        if (recvpkg.st.command == C_ON_INPUT && recvpkg.st.data[0] == 42) {
+            uint16_t belltime = recvpkg.st.data[1]<<8 | recvpkg.st.data[2];
+            debugf("doorbell was pressed for %d msec", belltime);
+            publish(Device::TOPIC_BASE + "/$doorbell", String(belltime));
+        } else if (recvpkg.st.command == C_ON_INPUT) {
+            publish(Device::TOPIC_BASE + "/$button", String(recvpkg.st.data[0]));
+        } else if (recvpkg.st.command == C_INFORM_OUTPUT && recvpkg.st.data[0] == 0x10) {
+            publish(Device::TOPIC_BASE + "/door/open", recvpkg.st.data[1] ? "true" : "false");
         }
 
         recvidx = -2; // set status: no packet available

@@ -2,6 +2,7 @@
 
 #define C_ON_INPUT  				 	0x02
 #define C_SET_OUTPUT				 	0x05
+#define C_INFORM_OUTPUT				 	0x06
 #define C_GET_TEMPERATURE				0x40
 #define C_SET_DISPLAY				 	0x41
 #define C_SET_MENU				 		0x42

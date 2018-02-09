@@ -2,7 +2,7 @@
 ESP_HOME = /opt/esp-open-sdk
 SMING_HOME = /home/mw/Projektarchive/Sming/Sming
 
-include secrets.mk
+include $(SITEDIR)/secrets.mk
 
 ## WiFi configuration to use
 WIFI_SSID = z3:iot
@@ -14,14 +14,14 @@ MQTT_PORT = 1883
 #MQTT_PORT = 23456
 MQTT_USERNAME = iot
 
-MQTT_REALM = ham
+MQTT_REALM = 
 
 ## Set to enable the HTTP server
 HTTP_PORT = 80
 
 ## Remote UDP logging (redirects debug* calls from serial port to UDP)
 REMOTE_UDP_LOG_IP = 224.0.0.69
-REMOTE_UDP_LOG_PORT = 9999
+REMOTE_UDP_LOG_PORT = 7890
 
 
 CFLAGS += -O2
@@ -51,6 +51,9 @@ COM_SPEED	= 76800
 COM_SPEED_SERIAL = 76800
 #COM_SPEED_ESPTOOL = 921600
 COM_SPEED_ESPTOOL = 460800
+
+
+SPI_MODE=dio
 
 ## Configure flash parameters (for ESP12-E and other new boards):
 # SPI_MODE = dio

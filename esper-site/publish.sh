@@ -3,8 +3,9 @@
 cd ../esper-neu
 
 app="$1"
-old_version="$(cat dist/$app.version || echo 0.0.0)"
-version="${old_version%.*}.$((${old_version##*.}+1))"
+#old_version="$(cat dist/$app.version || echo 0.0.0)"
+#version="${old_version%.*}.$((${old_version##*.}+1))"
+version="$(date +'%y%m%d.%H%M%S')"
 echo "Compiling version $version ..."
 
 make VERSION="$version" SITE="../esper-site" $app/clean $app
