@@ -19,10 +19,6 @@
 #define C_SET_TIME   					0xf3
 #define C_SET_BAUD_RATE					0xfc
 #define C_REBOOT_TO_BOOTLOADER			0xbf
-#define C_BOOT_WRITE_DATA				0xb0
-#define C_BOOT_RUNAPP					0xb1
-#define C_BOOT_READ_DATA				0xb9
-
 
 typedef union  {
 	uint8_t raw[RS485_BUFLEN];

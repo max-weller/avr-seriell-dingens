@@ -1,0 +1,7 @@
+
+SECUPLOAD_KEY=encoder.fromBase64("***** generate me with openssl rand -base64 32")
+WIFI_SSID="my_iot_wifi"
+WIFI_PSK="***********"
+MQTT_HOST = "mqtt-broker.local"
+MQTT_USER = "iot"
+MQTT_PASSWORD = "*********"

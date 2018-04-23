@@ -78,8 +78,9 @@ TARGET = main
 OBJDIR = .
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c ../Irmp/irmp.c
-# disabled softuart.c 
+SRC = $(TARGET).c lcd-routines.c led_strip.c crc8.c onewire.c ds18x20.c ../Irmp/irmp.c light_ws2812.c
+# ../Irmp/irmp.c
+# disabled  softuart.c  
 
 # List C++ source files here. (C dependencies are automatically generated.)
 CPPSRC = 
@@ -264,7 +265,7 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 # Type: avrdude -c ?
 # to get a full listing.
 #
-AVRDUDE_PROGRAMMER = avrisp2
+AVRDUDE_PROGRAMMER = usbasp
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
 AVRDUDE_PORT = /dev/ttyUSB0
@@ -500,7 +501,7 @@ extcoff: $(TARGET).elf
 %.hex: %.elf
 	@echo
 	@echo $(MSG_FLASH) $@
-	$(OBJCOPY) -O $(FORMAT) -R .eeprom $< $@
+	$(OBJCOPY) -O $(FORMAT) --srec-len=32 -R .eeprom $< $@
 
 %.eep: %.elf
 	@echo
@@ -589,7 +590,7 @@ clean_list :
 	$(REMOVE) $(TARGET).map
 	$(REMOVE) $(TARGET).sym
 	$(REMOVE) $(TARGET).lss
-	$(REMOVEDIR) $(OBJDIR)
+#	# $(REMOVEDIR) $(OBJDIR) WTF!!!!!!!
 	$(REMOVE) $(SRC:.c=.s)
 	$(REMOVE) $(SRC:.c=.d)
 	$(REMOVEDIR) .dep

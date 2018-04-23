@@ -1,0 +1,3 @@
+[submodule "esper-neu"]
+	path = esper-neu
+	url = git@github.com:max-weller/esper.git
